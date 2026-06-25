@@ -1,4 +1,4 @@
-// Prestige Garage AI-OS — Prisma Schema
+// Prestige Garage AI-OS — Prisma Schema v2
 // SQLite database for local + Vercel deployment
 
 generator client {
@@ -22,12 +22,14 @@ model Roll {
   model         String?
   width         Float?
   totalLength   Float
-  remainingLength Float? // calculated: totalLength - sum(consumptions.metersUsed + waste)
+  remainingLength Float?
   price         Float?
   supplier      String?
+  rollCategory  String   @default("ppf") // ppf | thermal_long | thermal_short
   purchaseDate  DateTime?
   notes         String?
   status        String   @default("active") // active | low | finished
+  carsCount     Int      @default(0) // number of cars serviced from this roll
   createdAt     DateTime @default(now())
 
   consumptions  RollConsumption[]
@@ -64,17 +66,18 @@ model RollConsumption {
 model Employee {
   id            String   @id @default(cuid())
   name          String   @unique
-  baseSalary    Float
+  baseSalary    Float    // FIXED monthly salary (not affected by attendance)
   phone         String?
   hireDate      DateTime?
   jobTitle      String?
-  status        String   @default("نشط") // نشط | متوقف
+  status        String   @default("نشط") // نشط | متوقف | محذوف
   notes         String?
   createdAt     DateTime @default(now())
 
   attendance    Attendance[]
   advances      Advance[]
   commissions   Commission[]
+  penalties     Penalty[]
 
   @@map("employees")
 }
@@ -84,10 +87,9 @@ model Attendance {
   employeeId    String
   employeeName  String
   date          DateTime
-  status        String   // ح=حضور | غ=غياب | إ=إجازة رسمية | ر=إجازة أسبوعية
+  status        String   // ح=حضور | غ=غياب | إ=إجازة | ر=إجازة أسبوعية
   month         Int
   year          Int
-  penalties     Float    @default(0)
   notes         String?
   createdAt     DateTime @default(now())
 
@@ -104,7 +106,7 @@ model Commission {
   date          DateTime?
   month         Int?
   year          Int?
-  monthLabel    String?  // "يونيو" etc.
+  monthLabel    String?
   clientName    String?
   carType       String?
   serviceType   String?
@@ -134,15 +136,33 @@ model Advance {
   @@map("advances")
 }
 
+// NEW: Penalties / Deductions
+model Penalty {
+  id            String   @id @default(cuid())
+  employeeId    String
+  employeeName  String
+  date          DateTime
+  amount        Float
+  reason        String?
+  notes         String?
+  month         Int
+  year          Int
+  createdAt     DateTime @default(now())
+
+  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@map("penalties")
+}
+
 // ════════════════════════════════════════════════════════════════
 // 📦 Stock Management — المخزون والخامات
 // ════════════════════════════════════════════════════════════════
 
 model StockItem {
   id            String   @id @default(cuid())
-  name          String
-  category      String   // ديتيلنج | بوليش وكوتينج | أدوات ومعدات
-  unit          String   // لتر | عبوة | وحدة
+  name          String   @unique
+  category      String   // detailing | polish | nano | tools
+  unit          String   @default("ml") // ml | pack | unit | liter
   totalReceived Float    @default(0)
   totalWithdrawn Float   @default(0)
   currentQty    Float    @default(0)
@@ -187,8 +207,8 @@ model Service {
   plate         String?
   clientName    String?
   carType       String?
-  serviceType   String   // ديتيلنج | بوليش | نانو | بروتيكشن | عزل حراري | أخرى
-  serviceCategory String? // for dashboard classification
+  serviceType   String
+  serviceCategory String?
   price         Float
   paymentMethod String?
   technician    String?
@@ -214,7 +234,7 @@ model Invoice {
 }
 
 // ════════════════════════════════════════════════════════════════
-// 🤖 AI Conversations & Alerts — محادثات AI والتنبيهات
+// 🤖 AI Conversations & Alerts
 // ════════════════════════════════════════════════════════════════
 
 model AiConversation {
@@ -222,7 +242,7 @@ model AiConversation {
   userMessage   String
   aiResponse    String
   actionTaken   String?
-  intentType    String?  // query | add | report | alert | suggestion
+  intentType    String?
   timestamp     DateTime @default(now())
 
   @@map("ai_conversations")
@@ -230,8 +250,8 @@ model AiConversation {
 
 model Alert {
   id            String   @id @default(cuid())
-  type          String   // low_stock | roll_low | advance_overdue | attendance
-  severity      String   @default("warning") // info | warning | critical
+  type          String
+  severity      String   @default("warning")
   title         String
   message       String
   relatedId     String?

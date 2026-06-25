@@ -1,11 +1,13 @@
 /**
- * Prestige AI Assistant Engine
- * Handles Arabic natural-language queries about garage data.
- * Uses z-ai-web-dev-sdk for LLM + structured tool-calling against the database.
+ * Prestige AI Assistant Engine v2 — accurate data reading
+ * Uses z-ai-web-dev-sdk with comprehensive database snapshot.
+ * The AI has access to ALL data: rolls, employees, salaries, attendance,
+ * advances, penalties, commissions, stock, services, invoices, alerts.
  */
 import { db } from '@/lib/db'
+import { categorizeService } from '@/lib/i18n'
 
-// ─── Tool: query data context for the LLM ───────────────────────────
+// ─── Tool: build comprehensive data snapshot ───────────────────
 async function buildDataSnapshot() {
   const [
     rolls,
@@ -18,10 +20,19 @@ async function buildDataSnapshot() {
     attendance,
     consumptions,
     alerts,
+    penalties,
+    stockMovements,
   ] = await Promise.all([
-    db.roll.findMany(),
-    db.employee.findMany({ include: { advances: true, commissions: true, attendance: true } }),
-    db.service.findMany({ orderBy: { date: 'desc' }, take: 100 }),
+    db.roll.findMany({ include: { consumptions: { take: 10, orderBy: { date: 'desc' } } } }),
+    db.employee.findMany({
+      include: {
+        advances: true,
+        commissions: true,
+        attendance: true,
+        penalties: true,
+      },
+    }),
+    db.service.findMany({ orderBy: { date: 'desc' }, take: 200 }),
     db.stockItem.findMany(),
     db.invoice.findMany(),
     db.advance.findMany(),
@@ -29,54 +40,97 @@ async function buildDataSnapshot() {
     db.attendance.findMany(),
     db.rollConsumption.findMany(),
     db.alert.findMany({ where: { isRead: false } }),
+    db.penalty.findMany(),
+    db.stockMovement.findMany({ orderBy: { date: 'desc' }, take: 50 }),
   ])
 
   const now = new Date()
   const currentMonth = now.getMonth() + 1
   const currentYear = now.getFullYear()
+  const monthNames = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر']
 
-  // Compute payroll for current month per employee
+  // ─── Compute payroll per employee for current month ─────────
+  // FIXED SALARY MODEL: salary is fixed monthly, only advances + penalties deducted
   const payroll = employees.map(emp => {
-    const monthAttendance = emp.attendance.filter(a => a.month === currentMonth && a.year === currentYear)
-    const present = monthAttendance.filter(a => a.status === 'ح').length
-    const officialLeave = monthAttendance.filter(a => a.status === 'إ').length
-    const paidDays = present + officialLeave
-    const dailyRate = emp.baseSalary / 30
-    const baseEarned = dailyRate * paidDays
+    const monthAtt = emp.attendance.filter(a => a.month === currentMonth && a.year === currentYear)
+    const present = monthAtt.filter(a => a.status === 'ح').length
+    const absent = monthAtt.filter(a => a.status === 'غ').length
+    const officialLeave = monthAtt.filter(a => a.status === 'إ').length
+    const weeklyLeave = monthAtt.filter(a => a.status === 'ر').length
+
     const monthCommissions = emp.commissions.filter(c => c.month === currentMonth && c.year === currentYear)
     const totalCommissions = monthCommissions.reduce((s, c) => s + c.amount, 0)
+
     const monthAdvances = emp.advances.filter(a => a.month === currentMonth && a.year === currentYear)
     const totalAdvances = monthAdvances.reduce((s, a) => s + a.amount, 0)
-    const penalties = monthAttendance.reduce((s, a) => s + (a.penalties || 0), 0)
+
+    const monthPenalties = emp.penalties.filter(p => p.month === currentMonth && p.year === currentYear)
+    const totalPenalties = monthPenalties.reduce((s, p) => s + p.amount, 0)
+
+    // FIXED SALARY — does NOT change with attendance
+    const fixedSalary = emp.baseSalary
+    const netSalary = fixedSalary + totalCommissions - totalAdvances - totalPenalties
+
     return {
       name: emp.name,
       jobTitle: emp.jobTitle,
-      baseSalary: emp.baseSalary,
-      paidDays,
-      present,
-      baseEarned: Math.round(baseEarned),
-      totalCommissions,
-      totalAdvances,
-      penalties,
-      netSalary: Math.round(baseEarned + totalCommissions - totalAdvances - penalties),
+      status: emp.status,
+      fixedSalary,
+      attendance: { present, absent, officialLeave, weeklyLeave, total: monthAtt.length },
+      commissions: { count: monthCommissions.length, total: totalCommissions, items: monthCommissions.map(c => ({ client: c.clientName, car: c.carType, service: c.serviceType, amount: c.amount, date: c.date })) },
+      advances: { count: monthAdvances.length, total: totalAdvances, items: monthAdvances.map(a => ({ amount: a.amount, date: a.date, notes: a.notes })) },
+      penalties: { count: monthPenalties.length, total: totalPenalties, items: monthPenalties.map(p => ({ amount: p.amount, date: p.date, reason: p.reason })) },
+      netSalary,
     }
   })
 
+  // ─── Services analysis (regrouped) ─────────────────────────
+  const servicesByCategory: Record<string, { count: number; total: number; items: any[] }> = {
+    cat_polish: { count: 0, total: 0, items: [] },
+    cat_nano: { count: 0, total: 0, items: [] },
+    cat_detailing: { count: 0, total: 0, items: [] },
+    cat_thermal: { count: 0, total: 0, items: [] },
+    cat_protection: { count: 0, total: 0, items: [] },
+    cat_other: { count: 0, total: 0, items: [] },
+  }
+  for (const s of services) {
+    const cat = categorizeService(s.serviceType)
+    servicesByCategory[cat].count++
+    servicesByCategory[cat].total += s.price
+    servicesByCategory[cat].items.push({
+      code: s.code,
+      date: s.date,
+      client: s.clientName,
+      car: s.carType,
+      service: s.serviceType,
+      price: s.price,
+      technician: s.technician,
+    })
+  }
+
+  // ─── Stock summary ─────────────────────────────────────────
+  const stockByCategory = {
+    detailing: stockItems.filter(s => s.category === 'detailing'),
+    polish: stockItems.filter(s => s.category === 'polish'),
+    nano: stockItems.filter(s => s.category === 'nano'),
+    tools: stockItems.filter(s => s.category === 'tools'),
+  }
+
+  // ─── Rolls summary ─────────────────────────────────────────
+  const rollsByCategory = {
+    ppf: rolls.filter(r => r.rollCategory === 'ppf'),
+    thermal_long: rolls.filter(r => r.rollCategory === 'thermal_long'),
+    thermal_short: rolls.filter(r => r.rollCategory === 'thermal_short'),
+  }
+
   return {
-    snapshotDate: now.toISOString().split('T')[0],
-    currentMonth,
-    currentYear,
-    rolls: rolls.map(r => ({
-      code: r.code,
-      brand: r.brand,
-      type: r.type,
-      model: r.model,
-      totalLength: r.totalLength,
-      remainingLength: r.remainingLength,
-      price: r.price,
-      supplier: r.supplier,
-      status: r.status,
-    })),
+    meta: {
+      snapshotDate: now.toISOString(),
+      currentMonth: monthNames[currentMonth - 1],
+      currentMonthNum: currentMonth,
+      currentYear,
+    },
+    payroll, // ← FIXED SALARY model, full breakdown
     employees: employees.map(e => ({
       name: e.name,
       jobTitle: e.jobTitle,
@@ -84,113 +138,176 @@ async function buildDataSnapshot() {
       status: e.status,
       phone: e.phone,
     })),
-    payroll,
-    services: services.slice(0, 50).map(s => ({
-      code: s.code,
-      date: s.date,
-      clientName: s.clientName,
-      carType: s.carType,
-      serviceType: s.serviceType,
-      price: s.price,
-      technician: s.technician,
-    })),
-    servicesStats: {
+    rolls: {
+      summary: {
+        total: rolls.length,
+        active: rolls.filter(r => r.status === 'active').length,
+        low: rolls.filter(r => r.status === 'low').length,
+        finished: rolls.filter(r => r.status === 'finished').length,
+        totalRemainingValue: rolls.reduce((s, r) => {
+          const remaining = r.remainingLength || 0
+          const total = r.totalLength || 1
+          return s + ((r.price || 0) * (remaining / total))
+        }, 0),
+      },
+      byCategory: rollsByCategory,
+      items: rolls.map(r => ({
+        code: r.code,
+        brand: r.brand,
+        type: r.type,
+        model: r.model,
+        category: r.rollCategory,
+        totalLength: r.totalLength,
+        remainingLength: r.remainingLength,
+        price: r.price,
+        supplier: r.supplier,
+        status: r.status,
+        carsCount: r.carsCount,
+        purchaseDate: r.purchaseDate,
+      })),
+    },
+    services: {
       total: services.length,
       totalRevenue: services.reduce((s, x) => s + x.price, 0),
-      byType: services.reduce((acc, s) => {
-        const t = s.serviceType || 'أخرى'
-        if (!acc[t]) acc[t] = { count: 0, total: 0 }
-        acc[t].count++
-        acc[t].total += s.price
-        return acc
-      }, {} as Record<string, { count: number; total: number }>),
+      byCategory: Object.entries(servicesByCategory).map(([key, v]) => ({
+        key,
+        count: v.count,
+        total: v.total,
+        average: v.count > 0 ? Math.round(v.total / v.count) : 0,
+        sampleItems: v.items.slice(0, 5),
+      })),
+      recentItems: services.slice(0, 20).map(s => ({
+        code: s.code,
+        date: s.date,
+        client: s.clientName,
+        car: s.carType,
+        service: s.serviceType,
+        price: s.price,
+        technician: s.technician,
+      })),
     },
-    stock: stockItems.map(s => ({
-      name: s.name,
-      category: s.category,
-      unit: s.unit,
-      currentQty: s.currentQty,
-      minLevel: s.minLevel,
-      status: s.status,
-      unitPrice: s.unitPrice,
-    })),
-    invoices: invoices.map(i => ({
-      deliveryNote: i.deliveryNote,
-      date: i.date,
-      description: i.description,
-      total: i.total,
-      discount: i.discount,
-      net: i.net,
-      itemsCount: i.itemsCount,
-    })),
-    advances: advances.slice(0, 30).map(a => ({
-      employee: a.employeeName,
-      date: a.date,
-      amount: a.amount,
-      month: a.month,
-      year: a.year,
-    })),
-    consumptions: consumptions.slice(0, 30).map(c => ({
-      date: c.date,
-      rollCode: c.rollCode,
-      clientName: c.clientName,
-      carType: c.carType,
-      metersUsed: c.metersUsed,
-      waste: c.waste,
-      workOrder: c.workOrder,
-    })),
+    stock: {
+      summary: {
+        totalItems: stockItems.length,
+        totalValue: stockItems.reduce((s, i) => s + (i.currentQty * i.unitPrice), 0),
+        lowStock: stockItems.filter(s => s.status === 'منخفض').length,
+        outOfStock: stockItems.filter(s => s.status === 'نفد').length,
+      },
+      byCategory: Object.entries(stockByCategory).map(([cat, items]) => ({
+        category: cat,
+        count: items.length,
+        items: items.map(i => ({
+          name: i.name,
+          unit: i.unit,
+          currentQty: i.currentQty,
+          minLevel: i.minLevel,
+          status: i.status,
+          unitPrice: i.unitPrice,
+        })),
+      })),
+    },
+    invoices: {
+      total: invoices.length,
+      totalNet: invoices.reduce((s, i) => s + i.net, 0),
+      items: invoices.map(i => ({
+        deliveryNote: i.deliveryNote,
+        date: i.date,
+        description: i.description,
+        total: i.total,
+        discount: i.discount,
+        net: i.net,
+        itemsCount: i.itemsCount,
+      })),
+    },
     alerts: alerts.map(a => ({
       type: a.type,
       severity: a.severity,
       title: a.title,
       message: a.message,
     })),
+    consumptions: {
+      total: consumptions.length,
+      recent: consumptions.slice(0, 20).map(c => ({
+        date: c.date,
+        rollCode: c.rollCode,
+        client: c.clientName,
+        car: c.carType,
+        metersUsed: c.metersUsed,
+        waste: c.waste,
+        workOrder: c.workOrder,
+      })),
+    },
   }
 }
 
-// ─── System prompt ───────────────────────────────────────────────────
-const SYSTEM_PROMPT = `أنت "مساعد برستيج" — المساعد الذكي لمركز Prestige Garage للعناية بالسيارات الفاخرة.
+// ─── System prompt (Arabic, financial-grade accuracy) ─────────
+const SYSTEM_PROMPT = `أنت "مساعد برستيج" — المساعد الذكي والمحاسبي لمركز Prestige Garage للعناية بالسيارات الفاخرة.
 
-تتحدث بالعربية الفصحى بلهجة مصرية بسيطة. مهمتك مساعدة المدير والفنيين في:
-1. الإجابة على الأسئلة حول المخزون والرواتب والإيرادات والرولات
-2. تحليل البيانات وإنشاء تقارير مختصرة
-3. اقتراح إجراءات ذكية بناءً على البيانات
+## مهمتك الأساسية:
+الإجابة على أسئلة المدير والفنيين بدقة متناهية من خلال البيانات المتاحة، حيث أن إجاباتك ستترتب عليها معاملات مالية هامة.
 
-قواعد مهمة:
-- أجب بإيجاز ووضوح، استخدم الأرقام والعملة (ج.م) عند الحاجة
-- إذا كان السؤال يتطلب إضافة بيانات جديدة (مثل "سجل استهلاك" أو "أضف سلفة")، اطلب التأكيد واذكر البيانات التي ستسجلها
-- استخدم الرموز التعبيرية عند المناسب (🎞️ 👷 📦 🔧 💰 ⚠️ ✅)
-- إذا لم تفهم السؤال، اطلب التوضيح بأدب
-- عند السؤال عن مرتب موظف، اذكر التفاصيل: أيام الحضور، الأساسي المستحق، العمولات، السلفيات، الصافي
-- عند السؤال عن رول، اذكر: الكود، الماركة، النوع، المتبقي، الحالة
+## القواعد الإلزامية:
 
-ستحصل على لقطة بيانات حديثة (snapshot) — استخدمها للإجابة بدقة.`
+### 1. الدقة أولاً
+- اقرأ البيانات المقدمة بعناية شديدة قبل الإجابة
+- استخدم الأرقام الفعلية من البيانات فقط — لا تخمن ولا تتوقع
+- إذا كانت البيانات غير كافية للإجابة، قل صراحة "لا توجد بيانات كافية"
+- لا تستخدم تقريب إلا إذا طُلب منك
 
-// ─── Main: chat with assistant ──────────────────────────────────────
+### 2. تنسيق الإجابات
+- استخدم العربية الفصحى بلهجة مصرية بسيطة
+- اعرف العملة (ج.م أو EGP) لكل مبلغ
+- استخدم الرموز التعبيرية المناسبة: 🎞️ 👷 📦 🔧 💰 ⚠️ ✅ 📊
+- للأرقام الكبيرة استخدم فواصل الآلاف (15,000 وليس 15000)
+- نظّم الإجابات الطويلة في نقاط واضحة
+
+### 3. نطاق المعرفة
+يمكنك الإجابة عن أي سؤال يتعلق بـ:
+- **الرولات**: الرصيد، الاستهلاك، عدد السيارات، الموردين، الحالة، الفئة (PPF/عزل طويل/قصير)
+- **الموظفون**: المرتب الثابت، الحضور، الغياب، العمولات، السلفيات، الجزاءات، صافي المرتب
+- **المخزون**: الكميات، الوحدات (مل/عبوة/وحدة)، الحالة، الفئة (بوليش/دتيلنج/نانو/أدوات)
+- **الخدمات**: السجل، الإيرادات، الفئات (بوليش/نانو/دتيلنج/عزل حراري وفاميه/بروتيكشن/أخرى)
+- **الفواتير**: أذونات التسليم، المبالغ، الخصومات
+- **التنبيهات**: الرولات المنخفضة، المخزون الناقص
+
+### 4. قواعد المرتب (مهم جداً)
+- المرتب الأساسي = مرتب ثابت شهري (لا يتأثر بالغياب)
+- صافي المرتب = المرتب الثابت + العمولات - السلفيات - الجزاءات
+- العمولات تُحسب من سجل الخدمات
+- السلفيات تُخصم من المرتب
+- الجزاءات تُخصم من المرتب
+- الغياب لا يخفض المرتب الأساسي
+
+### 5. الإجراءات
+- إذا طلب المستخدم إضافة/تعديل بيانات، اطلب التأكيد واذكر البيانات التي ستسجلها
+- إذا كان السؤال غامضاً، اطلب التوضيح بأدب
+- قدم اقتراحات ذكية بناءً على البيانات (مثل: تنبيه لنقص مخزون، رول أوشك على النفاذ)
+
+ستحصل على لقطة بيانات حديثة (JSON) — استخدمها بدقة للإجابة.`
+
+// ─── Main: chat with assistant ──────────────────────────────
 export async function chatWithAssistant(userMessage: string, conversationHistory: { role: string; content: string }[] = []) {
   try {
     const snapshot = await buildDataSnapshot()
 
-    // Dynamically import to keep server-only
     const ZAI = (await import('z-ai-web-dev-sdk')).default
     const ai = await ZAI.create()
 
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'system', content: `بيانات المركز الحالية (JSON):\n${JSON.stringify(snapshot, null, 2)}` },
+      { role: 'system', content: `بيانات المركز الحالية (JSON مفصل):\n${JSON.stringify(snapshot, null, 2)}` },
       ...conversationHistory.slice(-6).map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage },
     ]
 
     const response = await ai.chat.completions.create({
       messages,
-      temperature: 0.4,
-      max_tokens: 800,
+      temperature: 0.2, // lower temperature for more accurate, deterministic answers
+      max_tokens: 1200,
     })
 
     const reply = response.choices[0]?.message?.content || 'عذراً، لم أتمكن من توليد رد.'
 
-    // Save conversation
     await db.aiConversation.create({
       data: {
         userMessage,
@@ -209,12 +326,10 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
   }
 }
 
-// ─── Simple intent classifier ───────────────────────────────────────
 function detectIntent(message: string): string {
-  const m = message.toLowerCase()
-  if (/كم|ما هو|ما هي|أظهر|اعرض|قائمة|كشف|رصيد|متبقي|قيمة|حالة/.test(message)) return 'query'
-  if (/سجل|أضف|ضيف|ادخل|اشتريت|استلمت/.test(message)) return 'add'
-  if (/تقرير|قارن|تحليل|إحصائية|احصائية/.test(message)) return 'report'
+  if (/كم|ما هو|ما هي|أظهر|اعرض|قائمة|كشف|رصيد|متبقي|قيمة|حالة|صافي|مرتب/.test(message)) return 'query'
+  if (/سجل|أضف|ضيف|ادخل|اشتريت|استلمت|خصم|جزاء/.test(message)) return 'add'
+  if (/تقرير|قارن|تحليل|إحصائية|احصائية|كم ربح/.test(message)) return 'report'
   if (/نبه|تنبيه|تذكير/.test(message)) return 'alert'
   if (/اقترح|اقتراح|ماذا تنصح|ما رأيك/.test(message)) return 'suggestion'
   return 'query'

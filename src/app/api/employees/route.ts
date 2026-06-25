@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
 // GET /api/employees — list all employees with related data
+// Salary is FIXED monthly; only advances + penalties are deducted; commissions shown separately
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)
@@ -13,31 +14,32 @@ export async function GET(req: NextRequest) {
         attendance: { where: { month, year } },
         advances: { where: { month, year } },
         commissions: { where: { month, year } },
+        penalties: { where: { month, year } },
       },
       orderBy: { name: 'asc' },
     })
 
-    // Compute payroll for each employee
+    // Compute payroll — FIXED SALARY MODEL
     const result = employees.map(emp => {
       const presentDays = emp.attendance.filter(a => a.status === 'ح').length
       const absentDays = emp.attendance.filter(a => a.status === 'غ').length
       const officialLeaveDays = emp.attendance.filter(a => a.status === 'إ').length
       const weeklyLeaveDays = emp.attendance.filter(a => a.status === 'ر').length
-      // paid days = present + official leave (إ) — weekly leave (ر) and absence (غ) are unpaid
-      const paidDays = presentDays + officialLeaveDays
-      const dailyRate = emp.baseSalary / 30
-      const baseEarned = dailyRate * paidDays
+
+      // FIXED SALARY — does NOT change with attendance
+      const fixedSalary = emp.baseSalary
 
       const totalCommissions = emp.commissions.reduce((s, c) => s + c.amount, 0)
       const totalAdvances = emp.advances.reduce((s, a) => s + a.amount, 0)
-      const penalties = emp.attendance.reduce((s, a) => s + (a.penalties || 0), 0)
+      const totalPenalties = emp.penalties.reduce((s, p) => s + p.amount, 0)
 
-      const netSalary = baseEarned + totalCommissions - totalAdvances - penalties
+      // Net = Fixed Salary + Commissions - Advances - Penalties
+      const netSalary = fixedSalary + totalCommissions - totalAdvances - totalPenalties
 
       return {
         id: emp.id,
         name: emp.name,
-        baseSalary: emp.baseSalary,
+        baseSalary: emp.baseSalary, // This is the FIXED monthly salary
         phone: emp.phone,
         jobTitle: emp.jobTitle,
         status: emp.status,
@@ -53,16 +55,15 @@ export async function GET(req: NextRequest) {
           total: emp.attendance.length,
         },
         payroll: {
-          paidDays,
-          dailyRate: Math.round(dailyRate),
-          baseEarned: Math.round(baseEarned),
+          fixedSalary, // ← FIXED, not affected by attendance
           totalCommissions,
           totalAdvances,
-          penalties,
+          totalPenalties,
           netSalary: Math.round(netSalary),
         },
         commissionsList: emp.commissions,
         advancesList: emp.advances,
+        penaltiesList: emp.penalties,
       }
     })
 

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+  <defs>
+    <linearGradient id="prestigeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#DC143C"/>
+      <stop offset="100%" stop-color="#8B0A1F"/>
+    </linearGradient>
+    <linearGradient id="chromeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFFFFF"/>
+      <stop offset="50%" stop-color="#E0E0E0"/>
+      <stop offset="100%" stop-color="#888888"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Hexagon outer frame (premium badge) -->
+  <polygon points="60,4 110,32 110,88 60,116 10,88 10,32"
+           fill="url(#prestigeGrad)"
+           stroke="#DC143C"
+           stroke-width="2"/>
+
+  <!-- Inner hexagon (chrome frame) -->
+  <polygon points="60,12 102,36 102,84 60,108 18,84 18,36"
+           fill="#0A0A0A"
+           stroke="url(#chromeGrad)"
+           stroke-width="1"/>
+
+  <!-- Stylized "P" — luxury script -->
+  <g transform="translate(60 60)">
+    <!-- P stem -->
+    <rect x="-10" y="-22" width="8" height="44" rx="2" fill="url(#chromeGrad)"/>
+    <!-- P top loop -->
+    <path d="M -2 -22 Q 18 -22 18 -8 Q 18 4 -2 4 L -2 -4 Q 10 -4 10 -8 Q 10 -14 -2 -14 Z"
+          fill="url(#chromeGrad)"/>
+    <!-- Accent diamond -->
+    <polygon points="0,18 -4,22 0,26 4,22" fill="#DC143C"/>
+  </g>
+
+  <!-- Bottom text bar -->
+  <rect x="22" y="78" width="76" height="14" rx="2" fill="#DC143C"/>
+  <text x="60" y="88" text-anchor="middle"
+        font-family="-apple-system, Segoe UI, sans-serif"
+        font-size="7" font-weight="bold"
+        fill="#FFFFFF" letter-spacing="2">PRESTIGE</text>
+</svg>

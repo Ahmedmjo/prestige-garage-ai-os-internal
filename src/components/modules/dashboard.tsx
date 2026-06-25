@@ -7,7 +7,7 @@ import {
   TrendingUp, AlertTriangle, ArrowLeft, Bot,
 } from 'lucide-react'
 import {
-  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell,
+  AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import { StatCard } from '@/components/prestige/stat-card'
@@ -57,6 +57,35 @@ const CATEGORY_COLORS: Record<string, string> = {
   cat_thermal: '#DC143C',
   cat_protection: '#00C853',
   cat_other: '#888888',
+}
+
+// Distinct colors per employee for the line chart
+const EMPLOYEE_COLORS = [
+  '#DC143C', '#00C853', '#FF9100', '#03DAC6',
+  '#BB86FC', '#FFD600', '#FF4081', '#3B82F6',
+  '#A78BFA', '#34D399', '#FBBF24', '#F87171',
+]
+
+// Build a timeline of employee commissions across recent months
+// For now we use current month as a single point; can be extended to multi-month
+function buildEmployeeTimeline(performance: { name: string; commissions: number; services: number }[]) {
+  // Group by month — since we only have current month data, show current month
+  // Future: extend API to return multiple months
+  const now = new Date()
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const currentMonthName = monthNames[now.getMonth()]
+
+  const dataPoint: any = { month: currentMonthName }
+  for (const emp of performance) {
+    dataPoint[emp.name] = emp.commissions
+  }
+  // Add previous month as 0 to show a trend line (placeholder for future data)
+  const prevMonthName = monthNames[(now.getMonth() - 1 + 12) % 12]
+  const prevDataPoint: any = { month: prevMonthName }
+  for (const emp of performance) {
+    prevDataPoint[emp.name] = 0
+  }
+  return [prevDataPoint, dataPoint]
 }
 
 export function Dashboard({ onNavigate }: DashboardProps) {
@@ -162,7 +191,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Monthly Revenue Chart */}
+        {/* Monthly Revenue Chart — thinner, cleaner */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -179,22 +208,22 @@ export function Dashboard({ onNavigate }: DashboardProps) {
               {data.monthlyRevenue[data.monthlyRevenue.length - 1]?.count || 0} {t('servicesThisMonth')}
             </Badge>
           </div>
-          <ResponsiveContainer width="100%" height={260}>
-            <AreaChart data={data.monthlyRevenue} margin={{ top: 10, right: 0, left: 0, bottom: 0 }}>
+          <ResponsiveContainer width="100%" height={240}>
+            <AreaChart data={data.monthlyRevenue} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#DC143C" stopOpacity={0.6} />
+                  <stop offset="0%" stopColor="#DC143C" stopOpacity={0.35} />
                   <stop offset="100%" stopColor="#DC143C" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
-              <XAxis dataKey="month" stroke="#888" tick={{ fill: '#888', fontSize: 12 }} />
-              <YAxis stroke="#888" tick={{ fill: '#888', fontSize: 11 }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+              <XAxis dataKey="month" stroke="#666" tick={{ fill: '#888', fontSize: 11 }} axisLine={{ stroke: 'rgba(255,255,255,0.05)' }} tickLine={false} />
+              <YAxis stroke="#666" tick={{ fill: '#888', fontSize: 10 }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
               <Tooltip
-                contentStyle={{ background: '#0A0A0A', border: '1px solid rgba(220,20,60,0.3)', borderRadius: 8, color: '#fff' }}
+                contentStyle={{ background: '#0A0A0A', border: '1px solid rgba(220,20,60,0.3)', borderRadius: 8, color: '#fff', fontSize: 12 }}
                 formatter={(v: any) => [`${formatNumber(Number(v), lang)} ${t('egp')}`, lang === 'ar' ? 'الإيراد' : 'Revenue']}
               />
-              <Area type="monotone" dataKey="revenue" stroke="#DC143C" strokeWidth={2} fill="url(#colorRev)" />
+              <Area type="monotone" dataKey="revenue" stroke="#DC143C" strokeWidth={1.5} fill="url(#colorRev)" dot={{ r: 3, fill: '#DC143C', strokeWidth: 0 }} activeDot={{ r: 4 }} />
             </AreaChart>
           </ResponsiveContainer>
         </motion.div>
@@ -207,7 +236,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           className="prestige-card p-5"
         >
           <h3 className="font-bold text-white mb-4">{t('revenueByType')}</h3>
-          <ResponsiveContainer width="100%" height={260}>
+          <ResponsiveContainer width="100%" height={240}>
             <PieChart>
               <Pie
                 data={localizedCategories}
@@ -215,25 +244,26 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 nameKey="localizedLabel"
                 cx="50%"
                 cy="50%"
-                outerRadius={80}
-                innerRadius={45}
+                outerRadius={75}
+                innerRadius={42}
                 paddingAngle={2}
+                stroke="none"
               >
                 {localizedCategories.map((entry, idx) => (
-                  <Cell key={idx} fill={CATEGORY_COLORS[entry.key] || '#888'} stroke="none" />
+                  <Cell key={idx} fill={CATEGORY_COLORS[entry.key] || '#888'} />
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{ background: '#0A0A0A', border: '1px solid rgba(220,20,60,0.3)', borderRadius: 8, color: '#fff' }}
+                contentStyle={{ background: '#0A0A0A', border: '1px solid rgba(220,20,60,0.3)', borderRadius: 8, color: '#fff', fontSize: 12 }}
                 formatter={(v: any, n: any) => [`${formatNumber(Number(v), lang)} ${t('egp')}`, n]}
               />
-              <Legend wrapperStyle={{ fontSize: 11, color: '#888' }} />
+              <Legend wrapperStyle={{ fontSize: 10, color: '#888' }} iconSize={8} iconType="circle" />
             </PieChart>
           </ResponsiveContainer>
         </motion.div>
       </div>
 
-      {/* Category breakdown cards (new) */}
+      {/* Category breakdown cards — uniform colored design */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -242,18 +272,31 @@ export function Dashboard({ onNavigate }: DashboardProps) {
       >
         <h3 className="font-bold text-white mb-3">{t('revenueByType')}</h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-          {localizedCategories.map((cat) => (
-            <div key={cat.key} className="bg-white/5 rounded-lg p-3 border-r-2" style={{ borderColor: CATEGORY_COLORS[cat.key] }}>
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-xs text-gray-300 font-medium">{cat.localizedLabel}</span>
-                <div className="w-2.5 h-2.5 rounded-full" style={{ background: CATEGORY_COLORS[cat.key] }} />
+          {localizedCategories.map((cat) => {
+            const color = CATEGORY_COLORS[cat.key] || '#888'
+            return (
+              <div
+                key={cat.key}
+                className="rounded-lg p-3 transition-all hover:scale-[1.02]"
+                style={{
+                  background: `linear-gradient(135deg, ${color}15 0%, ${color}08 100%)`,
+                  border: `1px solid ${color}30`,
+                  borderTop: `2px solid ${color}`,
+                }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-200 font-medium leading-tight">{cat.localizedLabel}</span>
+                  <div className="w-2 h-2 rounded-full" style={{ background: color, boxShadow: `0 0 6px ${color}80` }} />
+                </div>
+                <p className="text-base font-bold" style={{ color }}>
+                  {formatNumber(cat.total, lang)}
+                </p>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {cat.count} {t('service')} · {lang === 'ar' ? 'متوسط' : 'avg'} {formatNumber(cat.average, lang)}
+                </p>
               </div>
-              <p className="text-lg font-bold" style={{ color: CATEGORY_COLORS[cat.key] }}>
-                {formatNumber(cat.total, lang)}
-              </p>
-              <p className="text-xs text-gray-500">{cat.count} {t('service')}</p>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </motion.div>
 
@@ -303,7 +346,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           </ScrollArea>
         </motion.div>
 
-        {/* Employee Performance */}
+        {/* Employee Performance — line per employee, thin lines */}
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
@@ -327,22 +370,59 @@ export function Dashboard({ onNavigate }: DashboardProps) {
           {data.employeePerformance.length === 0 ? (
             <div className="text-center py-8 text-gray-500 text-sm">{lang === 'ar' ? 'لا توجد عمولات هذا الشهر' : 'No commissions this month'}</div>
           ) : (
-            <ResponsiveContainer width="100%" height={260}>
-              <BarChart data={data.employeePerformance} layout="vertical" margin={{ left: 0, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" horizontal={false} />
-                <XAxis type="number" stroke="#888" tick={{ fill: '#888', fontSize: 11 }} tickFormatter={v => `${v}`} />
-                <YAxis type="category" dataKey="name" stroke="#888" tick={{ fill: '#ccc', fontSize: 12 }} width={100} />
-                <Tooltip
-                  contentStyle={{ background: '#0A0A0A', border: '1px solid rgba(220,20,60,0.3)', borderRadius: 8, color: '#fff' }}
-                  formatter={(v: any) => [`${formatNumber(Number(v), lang)} ${t('egp')}`, lang === 'ar' ? 'العمولات' : 'Commissions']}
-                />
-                <Bar dataKey="commissions" radius={[0, 6, 6, 0]}>
-                  {data.employeePerformance.map((_, idx) => (
-                    <Cell key={idx} fill={CATEGORY_COLORS.cat_detailing} />
+            <>
+              {/* Multi-line chart: one line per employee across recent months */}
+              <ResponsiveContainer width="100%" height={220}>
+                <LineChart
+                  data={buildEmployeeTimeline(data.employeePerformance)}
+                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
+                  <XAxis dataKey="month" stroke="#666" tick={{ fill: '#888', fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <YAxis stroke="#666" tick={{ fill: '#888', fontSize: 10 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    contentStyle={{ background: '#0A0A0A', border: '1px solid rgba(220,20,60,0.3)', borderRadius: 8, color: '#fff', fontSize: 12 }}
+                    formatter={(v: any, name: any) => [`${formatNumber(Number(v), lang)} ${t('egp')}`, name]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 10, color: '#888' }} iconSize={8} iconType="plainline" />
+                  {data.employeePerformance.map((emp, idx) => (
+                    <Line
+                      key={emp.name}
+                      type="monotone"
+                      dataKey={emp.name}
+                      stroke={EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length]}
+                      strokeWidth={1.5}
+                      dot={{ r: 2, strokeWidth: 0 }}
+                      activeDot={{ r: 4 }}
+                    />
                   ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+                </LineChart>
+              </ResponsiveContainer>
+              {/* Individual employee cards below */}
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mt-4">
+                {data.employeePerformance.map((emp, idx) => (
+                  <div
+                    key={emp.name}
+                    className="rounded-md p-2 flex items-center justify-between"
+                    style={{
+                      background: `${EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length]}12`,
+                      border: `1px solid ${EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length]}30`,
+                    }}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ background: EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length] }}
+                      />
+                      <span className="text-xs text-gray-200 truncate">{emp.name}</span>
+                    </div>
+                    <span className="text-xs font-bold" style={{ color: EMPLOYEE_COLORS[idx % EMPLOYEE_COLORS.length] }}>
+                      {formatNumber(emp.commissions, lang)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </motion.div>
       </div>

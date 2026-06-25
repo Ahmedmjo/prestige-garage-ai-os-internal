@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
-// POST /api/consumptions — record new roll consumption (auto-deduct from remaining)
+// POST /api/consumptions — record new roll consumption (auto-deduct + count cars)
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
@@ -20,7 +20,6 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
-    // Create consumption record
     const consumption = await db.rollConsumption.create({
       data: {
         rollId: roll.id,
@@ -39,18 +38,23 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    // Update roll remaining length
     const newRemaining = (roll.remainingLength || 0) - totalUsed
     let newStatus = 'active'
     if (newRemaining <= 0) newStatus = 'finished'
     else if (newRemaining <= 2) newStatus = 'low'
 
+    // Increment carsCount if this consumption has a client (i.e., a real car serviced)
+    const newCarsCount = body.clientName ? (roll.carsCount || 0) + 1 : roll.carsCount
+
     await db.roll.update({
       where: { id: roll.id },
-      data: { remainingLength: newRemaining, status: newStatus },
+      data: {
+        remainingLength: newRemaining,
+        status: newStatus,
+        carsCount: newCarsCount,
+      },
     })
 
-    // Auto-create alert if reached low/finished
     if (newStatus !== 'active' && roll.status === 'active') {
       await db.alert.create({
         data: {
@@ -64,7 +68,12 @@ export async function POST(req: NextRequest) {
       })
     }
 
-    return NextResponse.json({ consumption, newRemaining, newStatus }, { status: 201 })
+    return NextResponse.json({
+      consumption,
+      newRemaining,
+      newStatus,
+      carsCount: newCarsCount,
+    }, { status: 201 })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
