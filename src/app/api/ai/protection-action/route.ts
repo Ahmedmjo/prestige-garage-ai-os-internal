@@ -355,7 +355,6 @@ export async function GET(req: NextRequest) {
       where: { workOrder: { startsWith: 'OB-' } },
       orderBy: { date: 'desc' },
       take: 10,
-      include: { roll: true },
     })
 
     // Group by OB
