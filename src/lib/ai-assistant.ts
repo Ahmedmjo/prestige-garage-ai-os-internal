@@ -733,10 +733,111 @@ async function callOpenAICompatible(url: string, apiKey: string, model: string, 
 }
 
 async function callZAI(messages: any[], temperature: number, maxTokens: number): Promise<string> {
-  const ZAI = (await import('z-ai-web-dev-sdk')).default
-  const ai = await ZAI.create()
-  const response = await ai.chat.completions.create({ messages, temperature, max_tokens: maxTokens })
-  return response.choices[0]?.message?.content || 'عذراً، لم أتمكن من توليد رد.'
+  try {
+    const ZAI = (await import('z-ai-web-dev-sdk')).default
+    const ai = await ZAI.create()
+    const response = await ai.chat.completions.create({ messages, temperature, max_tokens: maxTokens })
+    return response.choices[0]?.message?.content || 'عذراً، لم أتمكن من توليد رد.'
+  } catch (e: any) {
+    throw new Error(`Z-AI SDK: ${e.message}`)
+  }
+}
+
+// ─── Smart fallback when no AI provider is available ────────
+// Generates a helpful response based on the data snapshot + user question
+async function smartFallback(userMessage: string, snapshot: any): Promise<string> {
+  const msg = userMessage.toLowerCase()
+  const lower = userMessage.trim()
+
+  // Protection / OB queries
+  if (/ob|أمر شغل|عملية|رقم العملية/i.test(lower)) {
+    const nextOB = snapshot.protection?.nextOB || 'OB-0001'
+    const recentOBs = snapshot.protection?.recentOBs || []
+    let reply = `📋 **أمر الشغل التالي: ${nextOB}**\n\n`
+    if (recentOBs.length > 0) {
+      reply += `**آخر أوامر الشغل:**\n`
+      for (const ob of recentOBs.slice(0, 5)) {
+        reply += `• ${ob.workOrder} — ${ob.clientName || 'عميل'} — ${ob.carType || ''} — ${ob.totalMeters.toFixed(1)}م (${ob.rollsCount} رولات) — ${new Date(ob.date).toLocaleDateString('en-GB')}\n`
+      }
+    }
+    return reply
+  }
+
+  // Rolls queries
+  if (/رول|رولات|بروتيكشن|ppf/i.test(lower)) {
+    const rolls = snapshot.rolls?.items || []
+    let reply = `🎞️ **ملخص الرولات:**\n`
+    reply += `• إجمالي الرولات: ${rolls.length}\n`
+    reply += `• نشط: ${rolls.filter((r: any) => (r.remainingLength || 0) > 5).length}\n`
+    reply += `• منخفض: ${rolls.filter((r: any) => { const rem = r.remainingLength || 0; return rem > 2 && rem <= 5; }).length}\n`
+    reply += `• حرج: ${rolls.filter((r: any) => { const rem = r.remainingLength || 0; return rem > 0 && rem <= 2; }).length}\n`
+    reply += `• منتهي: ${rolls.filter((r: any) => (r.remainingLength || 0) <= 0).length}\n\n`
+    reply += `**الرولات النشطة (أول 5):**\n`
+    for (const r of rolls.filter((r: any) => (r.remainingLength || 0) > 0).slice(0, 5)) {
+      reply += `• ${r.code} — ${r.brand} ${r.type} — متبقي ${r.remainingLength?.toFixed(1)}م\n`
+    }
+    return reply
+  }
+
+  // Employees queries
+  if (/موظف|موظفين|مرتب|عمولة|سلف|جزاء/i.test(lower)) {
+    const employees = snapshot.employees || []
+    const payroll = snapshot.payroll || []
+    let reply = `👷 **ملخص الموظفين:**\n`
+    reply += `• عدد الموظفين: ${employees.length}\n`
+    reply += `• صافي الرواتب: ${payroll.reduce((s: number, e: any) => s + e.netSalary, 0).toLocaleString('en-US')} ج.م\n\n`
+    for (const e of payroll.slice(0, 6)) {
+      reply += `• **${e.name}** (${e.jobTitle || 'موظف'})\n`
+      reply += `  - المرتب الثابت: ${e.fixedSalary.toLocaleString('en-US')} ج.م\n`
+      reply += `  - العمولات: ${e.commissions.total.toLocaleString('en-US')} ج.م\n`
+      reply += `  - السلفيات: ${e.advances.total.toLocaleString('en-US')} ج.م\n`
+      reply += `  - صافي المرتب: ${e.netSalary.toLocaleString('en-US')} ج.م\n`
+      reply += `  - حضور: ${e.attendance.present} | غياب: ${e.attendance.absent} | إجازة: ${e.attendance.officialLeave + e.attendance.weeklyLeave}\n`
+    }
+    return reply
+  }
+
+  // Stock queries
+  if (/مخزون|خامات|بوليش|دتيلنج/i.test(lower)) {
+    const stock = snapshot.stock || {}
+    let reply = `📦 **ملخص المخزون:**\n`
+    reply += `• إجمالي الأصناف: ${stock.summary?.totalItems || 0}\n`
+    reply += `• قيمة المخزون: ${(stock.summary?.totalValue || 0).toLocaleString('en-US')} ج.م\n`
+    reply += `• أصناف منخفضة: ${stock.summary?.lowStock || 0}\n`
+    reply += `• أصناف نفدت: ${stock.summary?.outOfStock || 0}\n`
+    return reply
+  }
+
+  // Services queries
+  if (/خدمة|خدمات|إيراد|ايراد/i.test(lower)) {
+    const services = snapshot.services || {}
+    let reply = `🔧 **ملخص الخدمات:**\n`
+    reply += `• إجمالي الخدمات: ${services.total || 0}\n`
+    reply += `• إجمالي الإيرادات: ${(services.totalRevenue || 0).toLocaleString('en-US')} ج.م\n`
+    return reply
+  }
+
+  // Default
+  return `🤖 **المساعد الذكي - وضع بدون اتصال**
+
+أهلاً! المساعد الذكي بيشتغل في الوضع "الذكي" بدون اتصال بـ AI خارجي.
+
+**أنا أقدر أساعدك في:**
+- 🎞️ **الرولات والبروتيكشن**: "ايه الـ OB التالي؟" أو "عرض الرولات"
+- 👷 **الموظفين**: "عرض الموظفين" أو "المرتبات"
+- 📦 **المخزون**: "المخزون" أو "الأصناف المنخفضة"
+- 🔧 **الخدمات**: "الإيرادات" أو "الخدمات"
+- 💰 **الفواتير**: "الفواتير"
+
+**لكن للاستخدام الكامل للمساعد الذكي (محادثة حرة)، محتاج:**
+1. **Groq API Key** (مجاني) - من https://console.groq.com
+2. أو **OpenRouter API Key** (فيه نماذج مجانية) - من https://openrouter.ai
+
+أضف المفتاح في متغيرات البيئة على Vercel:
+- \`GROQ_API_KEY\` - لـ Groq (Llama 3.3 70B)
+- \`OPENROUTER_API_KEY\` - لـ OpenRouter (LM 5 / Llama 5)
+
+أو جرّب سؤال محدد من اللي فوق وأنا هجاوبك من البيانات المتاحة.`
 }
 
 // ─── Main: chat with assistant (Multi-Provider) ──────────────
@@ -818,6 +919,12 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
         reply = await callZAI(messages, 0.2, 1200)
         providerUsed = 'z-ai-glm'
       } catch (e: any) { errors.push(`Z-AI: ${e.message}`) }
+    }
+
+    // Try 5: Smart fallback — generates helpful response from database
+    if (!reply) {
+      reply = await smartFallback(userMessage, snapshot)
+      providerUsed = 'smart-fallback'
     }
 
     if (!reply) {

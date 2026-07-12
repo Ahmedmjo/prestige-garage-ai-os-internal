@@ -53,7 +53,8 @@ interface OBGroup {
 
 const STATUS_CONFIG = {
   active: { label: 'نشط', color: '#00C853', bg: 'rgba(0,200,83,0.12)', icon: CheckCircle2 },
-  low: { label: 'أوشك على النفاذ', color: '#FF9100', bg: 'rgba(255,145,0,0.12)', icon: AlertTriangle },
+  low: { label: 'أوشك على النفاذ', color: '#FFD600', bg: 'rgba(255,214,0,0.12)', icon: AlertTriangle },
+  critical: { label: 'حرج', color: '#FF4500', bg: 'rgba(255,69,0,0.12)', icon: AlertTriangle },
   finished: { label: 'منتهي', color: '#DC143C', bg: 'rgba(220,20,60,0.12)', icon: XCircle },
 }
 
@@ -127,7 +128,7 @@ export function ProtectionModule() {
       return { status: 'critical', label: 'حرج', color: '#FF4500', bg: 'rgba(255,69,0,0.12)', percent: 85 }
     }
     if (remaining <= thresholds.roll_low) {
-      return { status: 'low', label: 'أوشك على النفاذ', color: '#FF9100', bg: 'rgba(255,145,0,0.12)', percent: 60 }
+      return { status: 'low', label: 'أوشك على النفاذ', color: '#FFD600', bg: 'rgba(255,214,0,0.12)', percent: 60 }
     }
     return { status: 'active', label: 'نشط', color: '#00C853', bg: 'rgba(0,200,83,0.12)', percent: 30 }
   }

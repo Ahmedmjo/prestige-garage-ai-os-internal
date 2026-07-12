@@ -256,7 +256,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 title={`نشط: ${data.protection.rollsByStatus.active}`}
               />
               <div
-                className="bg-[#FF9100]"
+                className="bg-[#FFD600]"
                 style={{ width: `${(data.protection.rollsByStatus.low / Math.max(stats.rollsCount, 1)) * 100}%` }}
                 title={`أوشك: ${data.protection.rollsByStatus.low}`}
               />
@@ -277,7 +277,7 @@ export function Dashboard({ onNavigate }: DashboardProps) {
                 {data.protection.rollsByStatus.active} {lang === 'ar' ? 'نشط' : 'active'}
               </span>
               <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-[#FF9100]" />
+                <span className="w-2 h-2 rounded-full bg-[#FFD600]" />
                 {data.protection.rollsByStatus.low} {lang === 'ar' ? 'أوشك' : 'low'}
               </span>
               <span className="flex items-center gap-1">

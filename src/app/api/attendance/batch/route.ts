@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
 
     let updated = 0
     let created = 0
+    const errors: string[] = []
 
     for (const entry of days) {
       const day = Number(entry.day)
@@ -24,19 +25,12 @@ export async function POST(req: NextRequest) {
       const date = new Date(year, month - 1, day)
       const status = entry.status || 'غ'
 
-      const existing = await db.attendance.findUnique({
-        where: { employeeId_date: { employeeId, date } },
-      })
-
-      if (existing) {
-        await db.attendance.update({
-          where: { id: existing.id },
-          data: { status, month, year },
-        })
-        updated++
-      } else {
-        await db.attendance.create({
-          data: {
+      try {
+        // Try upsert first (requires unique constraint on employeeId_date)
+        const result = await db.attendance.upsert({
+          where: { employeeId_date: { employeeId, date } },
+          update: { status, month, year, employeeName: emp.name },
+          create: {
             employeeId,
             employeeName: emp.name,
             date,
@@ -45,7 +39,40 @@ export async function POST(req: NextRequest) {
             year,
           },
         })
-        created++
+        // Check if it was update or create by checking createdAt
+        if (result.createdAt && new Date(result.createdAt).getTime() === result.updatedAt.getTime()) {
+          created++
+        } else {
+          updated++
+        }
+      } catch (upsertErr: any) {
+        // Fallback: try findFirst + update/create if unique constraint not available
+        try {
+          const existing = await db.attendance.findFirst({
+            where: { employeeId, date },
+          })
+          if (existing) {
+            await db.attendance.update({
+              where: { id: existing.id },
+              data: { status, month, year, employeeName: emp.name },
+            })
+            updated++
+          } else {
+            await db.attendance.create({
+              data: {
+                employeeId,
+                employeeName: emp.name,
+                date,
+                status,
+                month,
+                year,
+              },
+            })
+            created++
+          }
+        } catch (fallbackErr: any) {
+          errors.push(`Day ${day}: ${fallbackErr.message}`)
+        }
       }
     }
 
@@ -54,13 +81,14 @@ export async function POST(req: NextRequest) {
       updated,
       created,
       total: days.length,
+      errors: errors.length > 0 ? errors : undefined,
     })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
 }
 
-// GET /api/attendance — get attendance for all employees in a month
+// GET /api/attendance/batch — get attendance for all employees in a month
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url)

@@ -59,12 +59,26 @@ interface Consumption {
 }
 
 // Status labels are localized inline below
+// Color thresholds (matching protection module):
+//   remaining > 5m  → active (green #00C853)
+//   2m < remaining ≤ 5m → low (yellow #FFD600 — pure yellow, distinct from orange)
+//   0m < remaining ≤ 2m → critical (orange-red #FF4500)
+//   remaining ≤ 0m → finished (red #DC143C)
 
 const STATUS_CONFIG = (lang: 'ar' | 'en'): Record<string, { label: string; color: string; bg: string; icon: any }> => ({
   active: { label: lang === 'ar' ? 'نشط' : 'Active', color: '#00C853', bg: 'rgba(0,200,83,0.12)', icon: CheckCircle2 },
-  low: { label: lang === 'ar' ? 'أوشك على النفاذ' : 'Running Low', color: '#FF9100', bg: 'rgba(255,145,0,0.12)', icon: AlertTriangle },
+  low: { label: lang === 'ar' ? 'أوشك على النفاذ' : 'Running Low', color: '#FFD600', bg: 'rgba(255,214,0,0.12)', icon: AlertTriangle },
+  critical: { label: lang === 'ar' ? 'حرج' : 'Critical', color: '#FF4500', bg: 'rgba(255,69,0,0.12)', icon: AlertTriangle },
   finished: { label: lang === 'ar' ? 'منتهي' : 'Finished', color: '#DC143C', bg: 'rgba(220,20,60,0.12)', icon: XCircle },
 })
+
+// Compute status from remaining length using thresholds
+function computeRollStatus(remaining: number): 'active' | 'low' | 'critical' | 'finished' {
+  if (remaining <= 0) return 'finished'
+  if (remaining <= 2) return 'critical'
+  if (remaining <= 5) return 'low'
+  return 'active'
+}
 
 export function RollsModule() {
   const { t, lang } = useI18n()
@@ -113,9 +127,10 @@ export function RollsModule() {
 
   const stats = {
     total: rolls.length,
-    active: rolls.filter(r => r.status === 'active').length,
-    low: rolls.filter(r => r.status === 'low').length,
-    finished: rolls.filter(r => r.status === 'finished').length,
+    active: rolls.filter(r => computeRollStatus(r.remainingLength || 0) === 'active').length,
+    low: rolls.filter(r => computeRollStatus(r.remainingLength || 0) === 'low').length,
+    critical: rolls.filter(r => computeRollStatus(r.remainingLength || 0) === 'critical').length,
+    finished: rolls.filter(r => computeRollStatus(r.remainingLength || 0) === 'finished').length,
     ppf: rolls.filter(r => r.rollCategory === 'ppf').length,
     thermalLong: rolls.filter(r => r.rollCategory === 'thermal_long').length,
     thermalShort: rolls.filter(r => r.rollCategory === 'thermal_short').length,
@@ -135,7 +150,7 @@ export function RollsModule() {
       r.brand.toLowerCase().includes(search.toLowerCase()) ||
       r.type.toLowerCase().includes(search.toLowerCase()) ||
       (r.supplier || '').toLowerCase().includes(search.toLowerCase())
-    const matchesStatus = statusFilter === 'all' || r.status === statusFilter
+    const matchesStatus = statusFilter === 'all' || computeRollStatus(r.remainingLength || 0) === statusFilter
     const matchesCategory = categoryFilter === 'all' || r.rollCategory === categoryFilter
     return matchesSearch && matchesStatus && matchesCategory
   })
@@ -271,12 +286,13 @@ export function RollsModule() {
             className="bg-[#0A0A0A] border-white/10 text-white pr-10 placeholder:text-gray-600"
           />
         </div>
-        <div className="flex gap-1 bg-[#0A0A0A] border border-white/10 rounded-lg p-1">
+        <div className="flex gap-1 bg-[#0A0A0A] border border-white/10 rounded-lg p-1 flex-wrap">
           {[
-            { id: 'all', label: 'الكل' },
-            { id: 'active', label: 'نشط' },
-            { id: 'low', label: 'منخفض' },
-            { id: 'finished', label: 'منتهي' },
+            { id: 'all', label: 'الكل', color: '#FFFFFF' },
+            { id: 'active', label: 'نشط', color: '#00C853' },
+            { id: 'low', label: 'منخفض', color: '#FFD600' },
+            { id: 'critical', label: 'حرج', color: '#FF4500' },
+            { id: 'finished', label: 'منتهي', color: '#DC143C' },
           ].map(f => (
             <button
               key={f.id}
@@ -286,6 +302,7 @@ export function RollsModule() {
                   ? 'bg-[#DC143C] text-white'
                   : 'text-gray-400 hover:text-white'
               }`}
+              style={statusFilter !== f.id ? { color: f.color } : {}}
             >
               {f.label}
             </button>
@@ -301,7 +318,9 @@ export function RollsModule() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((roll, idx) => {
-            const status = statusConfig[roll.status] || statusConfig.active
+            // Use computed status based on remaining length (not DB status field)
+            const computedStatus = computeRollStatus(roll.remainingLength || 0)
+            const status = statusConfig[computedStatus] || statusConfig.active
             const StatusIcon = status.icon
             const remaining = roll.remainingLength || 0
             const total = roll.totalLength || 1
