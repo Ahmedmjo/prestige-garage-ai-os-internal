@@ -10,6 +10,8 @@ import {
   Bot,
   Menu,
   X,
+  Calendar,
+  Shield,
 } from 'lucide-react'
 import { useI18n } from '@/lib/i18n-context'
 import { NotificationBell } from '@/components/prestige/notification-bell'
@@ -23,8 +25,10 @@ import { EmployeesModule } from '@/components/modules/employees-module'
 import { StockModule } from '@/components/modules/stock-module'
 import { ServicesModule } from '@/components/modules/services-module'
 import { AIChat } from '@/components/modules/ai-chat'
+import { AttendanceModule } from '@/components/modules/attendance-module'
+import { ProtectionModule } from '@/components/modules/protection-module'
 
-type TabId = 'dashboard' | 'rolls' | 'employees' | 'stock' | 'services' | 'ai'
+type TabId = 'dashboard' | 'rolls' | 'protection' | 'employees' | 'attendance' | 'stock' | 'services' | 'ai'
 
 export default function Home() {
   const { t, lang, dir } = useI18n()
@@ -33,8 +37,10 @@ export default function Home() {
 
   const NAV_ITEMS: { id: TabId; label: string; icon: any; color: string }[] = [
     { id: 'dashboard', label: t('dashboard'), icon: LayoutDashboard, color: '#DC143C' },
+    { id: 'protection', label: lang === 'ar' ? 'البروتيكشن' : 'Protection', icon: Shield, color: '#00C853' },
     { id: 'rolls', label: t('rolls'), icon: Film, color: '#FF9100' },
     { id: 'employees', label: t('employees'), icon: Users, color: '#00C853' },
+    { id: 'attendance', label: lang === 'ar' ? 'الحضور والغياب' : 'Attendance', icon: Calendar, color: '#03DAC6' },
     { id: 'stock', label: t('stock'), icon: Package, color: '#BB86FC' },
     { id: 'services', label: t('services'), icon: Wrench, color: '#03DAC6' },
     { id: 'ai', label: t('aiAssistant'), icon: Bot, color: '#DC143C' },
@@ -49,6 +55,18 @@ export default function Home() {
     }
     return () => { document.body.style.overflow = '' }
   }, [sidebarOpen])
+
+  // Read tab from URL hash on mount
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '')
+    const params = new URLSearchParams(window.location.search)
+    const tabParam = params.get('tab') as TabId
+    if (tabParam && NAV_ITEMS.find(n => n.id === tabParam)) {
+      setActiveTab(tabParam)
+    } else if (hash && NAV_ITEMS.find(n => n.id === hash as TabId)) {
+      setActiveTab(hash as TabId)
+    }
+  }, [])
 
   return (
     <div className="min-h-screen bg-black text-white flex relative" dir={dir}>
@@ -158,8 +176,10 @@ export default function Home() {
         {/* Module content — NO animation to prevent shaking */}
         <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-x-hidden" key={activeTab + lang}>
           {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
+          {activeTab === 'protection' && <ProtectionModule />}
           {activeTab === 'rolls' && <RollsModule />}
           {activeTab === 'employees' && <EmployeesModule />}
+          {activeTab === 'attendance' && <AttendanceModule />}
           {activeTab === 'stock' && <StockModule />}
           {activeTab === 'services' && <ServicesModule />}
           {activeTab === 'ai' && <AIChat />}

@@ -5,7 +5,7 @@ import { motion } from 'framer-motion'
 import {
   Users, Plus, Search, DollarSign, Calendar,
   Wallet, Award, UserCheck, UserX, Save, Edit3, Grid3x3,
-  Trash2, AlertOctagon, X,
+  Trash2, AlertOctagon, X, Pencil,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -60,9 +60,12 @@ export function EmployeesModule() {
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showAdvanceDialog, setShowAdvanceDialog] = useState(false)
   const [showPenaltyDialog, setShowPenaltyDialog] = useState(false)
+  const [showCommissionDialog, setShowCommissionDialog] = useState(false)
   const [showSalaryDialog, setShowSalaryDialog] = useState(false)
   const [showAttendanceGrid, setShowAttendanceGrid] = useState(false)
   const [showAdvancesList, setShowAdvancesList] = useState(false)
+  const [showCommissionsList, setShowCommissionsList] = useState(false)
+  const [showPenaltiesList, setShowPenaltiesList] = useState(false)
   const [selectedEmp, setSelectedEmp] = useState<EmployeeData | null>(null)
 
   useEffect(() => {
@@ -328,6 +331,15 @@ export function EmployeesModule() {
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => { setSelectedEmp(emp); setShowCommissionDialog(true) }}
+                  className="border-[#00C853]/30 bg-[#00C853]/10 text-[#00C853] hover:bg-[#00C853]/20 text-xs h-8"
+                >
+                  <Plus size={12} className="ml-1" />
+                  {lang === 'ar' ? 'عمولة' : 'Commission'}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => { setSelectedEmp(emp); setShowAdvanceDialog(true) }}
                   className="border-white/10 bg-white/5 text-white hover:bg-white/10 text-xs h-8"
                 >
@@ -346,11 +358,29 @@ export function EmployeesModule() {
                 <Button
                   size="sm"
                   variant="outline"
+                  onClick={() => { setSelectedEmp(emp); setShowCommissionsList(true) }}
+                  className="border-white/10 bg-white/5 text-white hover:bg-white/10 text-xs h-8"
+                >
+                  <Award size={12} className="ml-1" />
+                  {lang === 'ar' ? `العمولات (${emp.commissionsList.length})` : `Commissions (${emp.commissionsList.length})`}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
                   onClick={() => { setSelectedEmp(emp); setShowAdvancesList(true) }}
                   className="border-white/10 bg-white/5 text-white hover:bg-white/10 text-xs h-8"
                 >
                   <Wallet size={12} className="ml-1" />
                   {lang === 'ar' ? `السلف (${emp.advancesList.length})` : `Advances (${emp.advancesList.length})`}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { setSelectedEmp(emp); setShowPenaltiesList(true) }}
+                  className="border-[#DC143C]/20 bg-[#DC143C]/5 text-[#DC143C] hover:bg-[#DC143C]/15 text-xs h-8"
+                >
+                  <AlertOctagon size={12} className="ml-1" />
+                  {lang === 'ar' ? `الجزاءات (${emp.penaltiesList.length})` : `Penalties (${emp.penaltiesList.length})`}
                 </Button>
                 <Button
                   size="sm"
@@ -371,6 +401,7 @@ export function EmployeesModule() {
       <AddEmployeeDialog open={showAddDialog} onOpenChange={setShowAddDialog} onSuccess={loadEmployees} />
       <AdvanceDialog open={showAdvanceDialog} onOpenChange={setShowAdvanceDialog} employee={selectedEmp} onSuccess={loadEmployees} />
       <PenaltyDialog open={showPenaltyDialog} onOpenChange={setShowPenaltyDialog} employee={selectedEmp} onSuccess={loadEmployees} />
+      <CommissionDialog open={showCommissionDialog} onOpenChange={setShowCommissionDialog} employee={selectedEmp} onSuccess={loadEmployees} />
       <SalaryDialog open={showSalaryDialog} onOpenChange={setShowSalaryDialog} employee={selectedEmp} onSuccess={loadEmployees} />
       <AttendanceGrid
         open={showAttendanceGrid}
@@ -384,6 +415,18 @@ export function EmployeesModule() {
       <AdvancesListDialog
         open={showAdvancesList}
         onOpenChange={setShowAdvancesList}
+        employee={selectedEmp}
+        onSuccess={loadEmployees}
+      />
+      <CommissionsListDialog
+        open={showCommissionsList}
+        onOpenChange={setShowCommissionsList}
+        employee={selectedEmp}
+        onSuccess={loadEmployees}
+      />
+      <PenaltiesListDialog
+        open={showPenaltiesList}
+        onOpenChange={setShowPenaltiesList}
         employee={selectedEmp}
         onSuccess={loadEmployees}
       />
@@ -523,7 +566,7 @@ function PenaltyDialog({ open, onOpenChange, employee, onSuccess }: {
   )
 }
 
-// ─── Advances List Dialog (with delete) ──────────────────────
+// ─── Advances List Dialog (with edit + delete) ──────────────
 function AdvancesListDialog({ open, onOpenChange, employee, onSuccess }: {
   open: boolean
   onOpenChange: (v: boolean) => void
@@ -532,6 +575,7 @@ function AdvancesListDialog({ open, onOpenChange, employee, onSuccess }: {
 }) {
   const { t, lang } = useI18n()
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [editing, setEditing] = useState<any | null>(null)
 
   if (!employee) return null
 
@@ -547,6 +591,22 @@ function AdvancesListDialog({ open, onOpenChange, employee, onSuccess }: {
       toast.error(e.message)
     } finally {
       setDeleting(null)
+    }
+  }
+
+  async function handleEditSave(advance: any, newAmount: string) {
+    try {
+      const res = await fetch(`/api/employees/${employee!.id}/advances/${advance.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: Number(newAmount) }),
+      })
+      if (!res.ok) throw new Error(lang === 'ar' ? 'فشل التعديل' : 'Failed')
+      toast.success(lang === 'ar' ? 'تم تعديل السلفة' : 'Advance updated')
+      setEditing(null)
+      onSuccess()
+    } catch (e: any) {
+      toast.error(e.message)
     }
   }
 
@@ -568,26 +628,67 @@ function AdvancesListDialog({ open, onOpenChange, employee, onSuccess }: {
             <div className="space-y-2">
               {employee.advancesList.map(adv => (
                 <div key={adv.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
-                  <div>
-                    <p className="text-sm font-bold text-[#FF9100]">{formatNumber(adv.amount, lang)} {t('egp')}</p>
-                    <p className="text-xs text-gray-500">
-                      {new Date(adv.date).toLocaleDateString('en-GB')}
-                      {adv.notes ? ` · ${adv.notes}` : ''}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => handleDelete(adv.id)}
-                    disabled={deleting === adv.id}
-                    className="text-[#DC143C] hover:bg-[#DC143C]/10 h-8 w-8 p-0"
-                  >
-                    {deleting === adv.id ? (
-                      <div className="w-3 h-3 border-2 border-[#DC143C]/30 border-t-[#DC143C] rounded-full animate-spin" />
+                  <div className="flex-1">
+                    {editing?.id === adv.id ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          defaultValue={adv.amount}
+                          onChange={e => editing.newAmount = e.target.value}
+                          className="bg-[#000] border-white/10 text-white h-8 text-sm"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleEditSave(adv, editing.newAmount || String(adv.amount))}
+                          className="bg-[#FF9100] text-white h-8 px-2 text-xs"
+                        >
+                          حفظ
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditing(null)}
+                          className="text-gray-400 h-8 px-2 text-xs"
+                        >
+                          إلغاء
+                        </Button>
+                      </div>
                     ) : (
-                      <Trash2 size={14} />
+                      <>
+                        <p className="text-sm font-bold text-[#FF9100]">{formatNumber(adv.amount, lang)} {t('egp')}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(adv.date).toLocaleDateString('en-GB')}
+                          {adv.notes ? ` · ${adv.notes}` : ''}
+                        </p>
+                      </>
                     )}
-                  </Button>
+                  </div>
+                  {editing?.id !== adv.id && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditing({ id: adv.id, newAmount: String(adv.amount) })}
+                        className="text-[#03DAC6] hover:bg-[#03DAC6]/10 h-8 w-8 p-0"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDelete(adv.id)}
+                        disabled={deleting === adv.id}
+                        className="text-[#DC143C] hover:bg-[#DC143C]/10 h-8 w-8 p-0"
+                      >
+                        {deleting === adv.id ? (
+                          <div className="w-3 h-3 border-2 border-[#DC143C]/30 border-t-[#DC143C] rounded-full animate-spin" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -836,6 +937,383 @@ function AdvanceDialog({ open, onOpenChange, employee, onSuccess }: {
           <Button onClick={handleSubmit} disabled={saving} className="prestige-gradient border-0">
             {saving ? t('saving') : (lang === 'ar' ? 'تسجيل السلفة' : 'Record Advance')}
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Commission Dialog (add new commission) ───────────
+function CommissionDialog({ open, onOpenChange, employee, onSuccess }: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  employee: EmployeeData | null
+  onSuccess: () => void
+}) {
+  const { t, lang } = useI18n()
+  const [form, setForm] = useState({
+    amount: '', date: new Date().toISOString().split('T')[0],
+    clientName: '', carType: '', serviceType: '', serviceCategory: '', notes: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    if (employee) {
+      setForm({ amount: '', date: new Date().toISOString().split('T')[0], clientName: '', carType: '', serviceType: '', serviceCategory: '', notes: '' })
+    }
+  }, [employee, open])
+
+  async function handleSubmit() {
+    if (!employee || !form.amount) {
+      toast.error(t('required'))
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch('/api/commissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...form,
+          employeeId: employee.id,
+          employeeName: employee.name,
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || (lang === 'ar' ? 'فشل الإضافة' : 'Failed'))
+      }
+      toast.success(lang === 'ar' ? `تم تسجيل عمولة ${formatNumber(Number(form.amount), lang)} ${t('egp')} لـ ${employee.name}` : `Commission recorded for ${employee.name}`)
+      onOpenChange(false)
+      onSuccess()
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (!employee) return null
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-[#0A0A0A] border-white/10 text-white max-w-md" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <Award size={18} className="text-[#00C853]" />
+            {lang === 'ar' ? 'تسجيل عمولة' : 'Record Commission'} — {employee.name}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3 py-2">
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'المبلغ' : 'Amount'} ({t('egp')}) *</Label>
+            <Input type="number" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('date')}</Label>
+            <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'اسم العميل' : 'Client'}</Label>
+            <Input value={form.clientName} onChange={e => setForm({ ...form, clientName: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'نوع السيارة' : 'Car'}</Label>
+            <Input value={form.carType} onChange={e => setForm({ ...form, carType: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'نوع الخدمة' : 'Service Type'}</Label>
+            <Input value={form.serviceType} onChange={e => setForm({ ...form, serviceType: e.target.value })} placeholder={lang === 'ar' ? 'مثال: بوليش، ديتيلنج...' : 'Polish, Detailing...'} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'تصنيف الخدمة' : 'Service Category'}</Label>
+            <Input value={form.serviceCategory} onChange={e => setForm({ ...form, serviceCategory: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('notes')}</Label>
+            <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-gray-400">{t('cancel')}</Button>
+          <Button onClick={handleSubmit} disabled={saving} className="bg-[#00C853] hover:bg-[#00C853]/80 border-0">
+            {saving ? t('saving') : (lang === 'ar' ? 'تسجيل العمولة' : 'Record Commission')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Commissions List Dialog (with edit/delete) ───────
+function CommissionsListDialog({ open, onOpenChange, employee, onSuccess }: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  employee: EmployeeData | null
+  onSuccess: () => void
+}) {
+  const { t, lang } = useI18n()
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [editing, setEditing] = useState<any | null>(null)
+
+  if (!employee) return null
+
+  async function handleDelete(commissionId: string) {
+    if (!employee) return
+    if (!confirm(lang === 'ar' ? 'حذف هذه العمولة؟' : 'Delete this commission?')) return
+    setDeleting(commissionId)
+    try {
+      await fetch(`/api/commissions/${commissionId}`, { method: 'DELETE' })
+      toast.success(lang === 'ar' ? 'تم حذف العمولة' : 'Commission deleted')
+      onSuccess()
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  async function handleEditSave(commission: any, newAmount: string) {
+    try {
+      const res = await fetch(`/api/commissions/${commission.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: Number(newAmount) }),
+      })
+      if (!res.ok) throw new Error(lang === 'ar' ? 'فشل التعديل' : 'Failed')
+      toast.success(lang === 'ar' ? 'تم تعديل العمولة' : 'Commission updated')
+      setEditing(null)
+      onSuccess()
+    } catch (e: any) {
+      toast.error(e.message)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-[#0A0A0A] border-white/10 text-white max-w-lg" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <Award size={18} className="text-[#00C853]" />
+            {lang === 'ar' ? 'سجل العمولات' : 'Commissions History'} — {employee.name}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="max-h-96 overflow-y-auto py-2">
+          {employee.commissionsList.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              {lang === 'ar' ? 'لا توجد عمولات' : 'No commissions'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {employee.commissionsList.map(com => (
+                <div key={com.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
+                  <div className="flex-1">
+                    {editing?.id === com.id ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          defaultValue={com.amount}
+                          onChange={e => editing.newAmount = e.target.value}
+                          className="bg-[#000] border-white/10 text-white h-8 text-sm"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleEditSave(com, editing.newAmount || String(com.amount))}
+                          className="bg-[#00C853] text-white h-8 px-2 text-xs"
+                        >
+                          حفظ
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditing(null)}
+                          className="text-gray-400 h-8 px-2 text-xs"
+                        >
+                          إلغاء
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-[#00C853]">{formatNumber(com.amount, lang)} {t('egp')}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(com.date).toLocaleDateString('en-GB')}
+                          {com.clientName ? ` · ${com.clientName}` : ''}
+                          {com.serviceType ? ` · ${com.serviceType}` : ''}
+                          {com.notes ? ` · ${com.notes}` : ''}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                  {editing?.id !== com.id && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditing({ id: com.id, newAmount: String(com.amount) })}
+                        className="text-[#03DAC6] hover:bg-[#03DAC6]/10 h-8 w-8 p-0"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDelete(com.id)}
+                        disabled={deleting === com.id}
+                        className="text-[#DC143C] hover:bg-[#DC143C]/10 h-8 w-8 p-0"
+                      >
+                        {deleting === com.id ? (
+                          <div className="w-3 h-3 border-2 border-[#DC143C]/30 border-t-[#DC143C] rounded-full animate-spin" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-gray-400">{t('close')}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Penalties List Dialog (with edit/delete) ─────────
+function PenaltiesListDialog({ open, onOpenChange, employee, onSuccess }: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  employee: EmployeeData | null
+  onSuccess: () => void
+}) {
+  const { t, lang } = useI18n()
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [editing, setEditing] = useState<any | null>(null)
+
+  if (!employee) return null
+
+  async function handleDelete(penaltyId: string) {
+    if (!employee) return
+    if (!confirm(lang === 'ar' ? 'حذف هذا الجزاء؟' : 'Delete this penalty?')) return
+    setDeleting(penaltyId)
+    try {
+      await fetch(`/api/penalties/${penaltyId}`, { method: 'DELETE' })
+      toast.success(lang === 'ar' ? 'تم حذف الجزاء' : 'Penalty deleted')
+      onSuccess()
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setDeleting(null)
+    }
+  }
+
+  async function handleEditSave(penalty: any, newAmount: string) {
+    try {
+      const res = await fetch(`/api/penalties/${penalty.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: Number(newAmount) }),
+      })
+      if (!res.ok) throw new Error(lang === 'ar' ? 'فشل التعديل' : 'Failed')
+      toast.success(lang === 'ar' ? 'تم تعديل الجزاء' : 'Penalty updated')
+      setEditing(null)
+      onSuccess()
+    } catch (e: any) {
+      toast.error(e.message)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-[#0A0A0A] border-white/10 text-white max-w-lg" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <AlertOctagon size={18} className="text-[#DC143C]" />
+            {lang === 'ar' ? 'سجل الجزاءات' : 'Penalties History'} — {employee.name}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="max-h-96 overflow-y-auto py-2">
+          {employee.penaltiesList.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">
+              {lang === 'ar' ? 'لا توجد جزاءات' : 'No penalties'}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {employee.penaltiesList.map(pen => (
+                <div key={pen.id} className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/5">
+                  <div className="flex-1">
+                    {editing?.id === pen.id ? (
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          defaultValue={pen.amount}
+                          onChange={e => editing.newAmount = e.target.value}
+                          className="bg-[#000] border-white/10 text-white h-8 text-sm"
+                          autoFocus
+                        />
+                        <Button
+                          size="sm"
+                          onClick={() => handleEditSave(pen, editing.newAmount || String(pen.amount))}
+                          className="bg-[#DC143C] text-white h-8 px-2 text-xs"
+                        >
+                          حفظ
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setEditing(null)}
+                          className="text-gray-400 h-8 px-2 text-xs"
+                        >
+                          إلغاء
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm font-bold text-[#DC143C]">{formatNumber(pen.amount, lang)} {t('egp')}</p>
+                        <p className="text-xs text-gray-500">
+                          {new Date(pen.date).toLocaleDateString('en-GB')}
+                          {pen.reason ? ` · ${pen.reason}` : ''}
+                          {pen.notes ? ` · ${pen.notes}` : ''}
+                        </p>
+                      </>
+                    )}
+                  </div>
+                  {editing?.id !== pen.id && (
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setEditing({ id: pen.id, newAmount: String(pen.amount) })}
+                        className="text-[#03DAC6] hover:bg-[#03DAC6]/10 h-8 w-8 p-0"
+                      >
+                        <Pencil size={14} />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDelete(pen.id)}
+                        disabled={deleting === pen.id}
+                        className="text-[#DC143C] hover:bg-[#DC143C]/10 h-8 w-8 p-0"
+                      >
+                        {deleting === pen.id ? (
+                          <div className="w-3 h-3 border-2 border-[#DC143C]/30 border-t-[#DC143C] rounded-full animate-spin" />
+                        ) : (
+                          <Trash2 size={14} />
+                        )}
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-gray-400">{t('close')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

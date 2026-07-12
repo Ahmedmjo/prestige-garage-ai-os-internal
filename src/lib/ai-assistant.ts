@@ -576,28 +576,61 @@ const SYSTEM_PROMPT = `أنت "مساعد برستيج" — المساعد ال�
 ستحصل على لقطة بيانات حديثة (JSON) — استخدمها بدقة للإجابة.`
 
 // ─── Multi-Provider Configuration ────────────────────────────
+// LM 5 (Llama 5) - primary AI provider via OpenRouter
+// Falls back to Groq (Llama 3.3 70B) and Z-AI GLM
 const PROVIDERS = {
+  // LM 5 (Llama 5) — primary provider via OpenRouter
+  // Available variants:
+  //   - meta-llama/llama-5-70b-instruct
+  //   - meta-llama/llama-5-8b-instruct
+  //   - meta-llama/llama-5-70b-chat
+  lm5: {
+    enabled: !!process.env.OPENROUTER_API_KEY,
+    apiKey: process.env.OPENROUTER_API_KEY || '',
+    model: process.env.LM5_MODEL || 'meta-llama/llama-5-70b-instruct',
+    url: 'https://openrouter.ai/api/v1/chat/completions',
+    headers: {
+      'HTTP-Referer': 'https://prestige-garage-internal.vercel.app',
+      'X-Title': 'Prestige Garage AI-OS',
+    },
+  },
+  // Groq fallback — Llama 3.3 70B (free, fast)
   groq: {
     enabled: !!process.env.GROQ_API_KEY,
     apiKey: process.env.GROQ_API_KEY || '',
     model: 'llama-3.3-70b-versatile',
     url: 'https://api.groq.com/openai/v1/chat/completions',
   },
+  // OpenRouter alternative models
   openrouter: {
     enabled: !!process.env.OPENROUTER_API_KEY,
     apiKey: process.env.OPENROUTER_API_KEY || '',
     model: 'meta-llama/llama-3.1-8b-instruct:free',
     url: 'https://openrouter.ai/api/v1/chat/completions',
+    headers: {
+      'HTTP-Referer': 'https://prestige-garage-internal.vercel.app',
+      'X-Title': 'Prestige Garage AI-OS',
+    },
   },
 }
 
-async function callOpenAICompatible(url: string, apiKey: string, model: string, messages: any[], temperature: number, maxTokens: number): Promise<string> {
+async function callOpenAICompatible(url: string, apiKey: string, model: string, messages: any[], temperature: number, maxTokens: number, extraHeaders?: Record<string, string>): Promise<string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${apiKey}`,
+  }
+  if (extraHeaders) {
+    Object.assign(headers, extraHeaders)
+  }
   const response = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    headers,
     body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens }),
   })
-  if (!response.ok) throw new Error(`API error ${response.status}`)
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '')
+    throw new Error(`API error ${response.status}: ${errText.slice(0, 200)}`)
+  }
   const data = await response.json()
   return data.choices[0]?.message?.content || 'عذراً، لم أتمكن من توليد رد.'
 }
@@ -642,23 +675,47 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
     let providerUsed = ''
     const errors: string[] = []
 
-    // Try 1: Groq (Llama 3 70B)
-    if (PROVIDERS.groq.enabled) {
+    // Try 1: LM 5 (Llama 5) via OpenRouter — primary provider
+    if (PROVIDERS.lm5.enabled) {
+      try {
+        reply = await callOpenAICompatible(
+          PROVIDERS.lm5.url,
+          PROVIDERS.lm5.apiKey,
+          PROVIDERS.lm5.model,
+          messages,
+          0.2,
+          1500,
+          PROVIDERS.lm5.headers,
+        )
+        providerUsed = 'lm5-llama-5'
+      } catch (e: any) { errors.push(`LM5: ${e.message}`) }
+    }
+
+    // Try 2: Groq (Llama 3.3 70B) — fast fallback
+    if (!reply && PROVIDERS.groq.enabled) {
       try {
         reply = await callOpenAICompatible(PROVIDERS.groq.url, PROVIDERS.groq.apiKey, PROVIDERS.groq.model, messages, 0.2, 1200)
         providerUsed = 'groq-llama-3.3-70b'
       } catch (e: any) { errors.push(`Groq: ${e.message}`) }
     }
 
-    // Try 2: OpenRouter (Llama 3 8B)
+    // Try 3: OpenRouter (Llama 3.1 8B free)
     if (!reply && PROVIDERS.openrouter.enabled) {
       try {
-        reply = await callOpenAICompatible(PROVIDERS.openrouter.url, PROVIDERS.openrouter.apiKey, PROVIDERS.openrouter.model, messages, 0.2, 1200)
+        reply = await callOpenAICompatible(
+          PROVIDERS.openrouter.url,
+          PROVIDERS.openrouter.apiKey,
+          PROVIDERS.openrouter.model,
+          messages,
+          0.2,
+          1200,
+          PROVIDERS.openrouter.headers,
+        )
         providerUsed = 'openrouter-llama-3.1-8b'
       } catch (e: any) { errors.push(`OpenRouter: ${e.message}`) }
     }
 
-    // Try 3: z-ai-web-dev-sdk (GLM) — always available
+    // Try 4: z-ai-web-dev-sdk (GLM) — always available
     if (!reply) {
       try {
         reply = await callZAI(messages, 0.2, 1200)

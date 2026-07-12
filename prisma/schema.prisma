@@ -373,3 +373,16 @@ model MonthlyPayrollSummary {
   @@unique([employeeName, month, year])
   @@map("monthly_payroll_summary")
 }
+
+// ════════════════════════════════════════════════════════════════
+// ⚙️ Settings — الإعدادات والتنبيهات
+// ════════════════════════════════════════════════════════════════
+
+model Setting {
+  id            String   @id @default(cuid())
+  key           String   @unique
+  value         String
+  updatedAt     DateTime @updatedAt
+
+  @@map("settings")
+}
