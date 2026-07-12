@@ -403,95 +403,192 @@ function parseProtectionCommand(message: string): ParsedProtectionCommand {
 async function executeProtectionCommand(cmd: ParsedProtectionCommand): Promise<string> {
   if (!cmd.action) return ''
 
-  const baseUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000'
+  // Use relative URL — works on both Vercel and localhost
+  // db is already imported at top of file, use direct db calls instead of HTTP fetch
 
   try {
     if (cmd.action === 'next_ob') {
-      const res = await fetch(`${baseUrl}/api/ai/protection-action`, { method: 'GET' })
-      const data = await res.json()
-      let response = `📋 **أمر الشغل التالي: ${data.nextOB}**\n\n`
-      if (data.recentOBs && data.recentOBs.length > 0) {
+      // Query DB directly
+      const recentConsumptions = await db.rollConsumption.findMany({
+        where: { workOrder: { startsWith: 'OB-' } },
+        orderBy: { date: 'desc' },
+        take: 30,
+      })
+
+      // Group by OB
+      const obGroups: Record<string, any> = {}
+      for (const c of recentConsumptions) {
+        if (!c.workOrder) continue
+        if (!obGroups[c.workOrder]) {
+          obGroups[c.workOrder] = {
+            workOrder: c.workOrder,
+            clientName: c.clientName,
+            carType: c.carType,
+            date: c.date,
+            totalMeters: 0,
+            rollsCount: 0,
+          }
+        }
+        obGroups[c.workOrder].totalMeters += c.metersUsed || 0
+        obGroups[c.workOrder].rollsCount++
+      }
+      const obList = Object.values(obGroups).sort((a: any, b: any) =>
+        new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+
+      // Calculate next OB
+      const obNumbers = Object.keys(obGroups).filter(w => w.startsWith('OB-'))
+      let nextOBNum = 1
+      for (const w of obNumbers) {
+        const m = w.match(/OB-(\d+)/)
+        if (m) {
+          const n = parseInt(m[1], 10)
+          if (n >= nextOBNum) nextOBNum = n + 1
+        }
+      }
+      const nextOB = `OB-${String(nextOBNum).padStart(4, '0')}`
+
+      let response = `📋 **أمر الشغل التالي: ${nextOB}**\n\n`
+      if (obList.length > 0) {
         response += `**آخر أوامر الشغل:**\n`
-        for (const ob of data.recentOBs.slice(0, 5)) {
+        for (const ob of obList.slice(0, 5)) {
           response += `• ${ob.workOrder} — ${ob.clientName || 'عميل'} — ${ob.carType || ''} — ${ob.totalMeters.toFixed(1)}م (${ob.rollsCount} رولات) — ${new Date(ob.date).toLocaleDateString('en-GB')}\n`
         }
       } else {
-        response += `لا توجد أوامر شغل سابقة. ابدأ بـ ${data.nextOB}.`
+        response += `لا توجد أوامر شغل سابقة. ابدأ بـ ${nextOB}.`
       }
       return response
     }
 
     if (cmd.action === 'search_roll' && cmd.partialCode) {
-      const res = await fetch(`${baseUrl}/api/ai/protection-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'fuzzy_search_roll',
-          partialCode: cmd.partialCode,
-        }),
-      })
-      const data = await res.json()
-      if (data.count === 0) {
+      const partialUpper = cmd.partialCode.toUpperCase().trim()
+      // Try exact match first
+      const exact = await db.roll.findUnique({ where: { code: partialUpper } })
+      let matches = exact ? [exact] : []
+      if (matches.length === 0) {
+        matches = await db.roll.findMany({
+          where: {
+            OR: [
+              { code: { contains: partialUpper, mode: 'insensitive' } },
+              { brand: { contains: cmd.partialCode, mode: 'insensitive' } },
+              { type: { contains: cmd.partialCode, mode: 'insensitive' } },
+            ],
+          },
+          take: 10,
+        })
+      }
+
+      if (matches.length === 0) {
         return `❌ لم أجد أي رول يحتوي على "${cmd.partialCode}".`
       }
-      let response = `🔍 **نتائج البحث عن "${cmd.partialCode}" (${data.count} نتيجة):**\n\n`
-      for (const r of data.matches) {
-        const status = r.status === 'active' ? '✅ نشط' : r.status === 'low' ? '⚠️ منخفض' : '❌ منتهي'
-        response += `• **${r.code}** — ${r.brand} ${r.type} ${r.model || ''} — متبقي ${r.remainingLength?.toFixed(1)}م — ${status}\n`
+      let response = `🔍 **نتائج البحث عن "${cmd.partialCode}" (${matches.length} نتيجة):**\n\n`
+      for (const r of matches) {
+        const remaining = r.remainingLength || 0
+        const status = remaining > 5 ? '✅ نشط' : remaining > 2 ? '⚠️ منخفض' : remaining > 0 ? '🚨 حرج' : '❌ منتهي'
+        response += `• **${r.code}** — ${r.brand} ${r.type} ${r.model || ''} — متبقي ${remaining.toFixed(1)}م — ${status}\n`
       }
       return response
     }
 
     if (cmd.action === 'register' && cmd.consumptions && cmd.consumptions.length > 0) {
       const c = cmd.consumptions[0]
-      const res = await fetch(`${baseUrl}/api/ai/protection-action`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'register_consumption',
-          rollCode: c.rollCode,
-          metersUsed: c.metersUsed,
-          waste: c.waste,
-          usageArea: c.usageArea,
-          workOrder: cmd.workOrder,
-          clientName: cmd.clientName,
-          carType: cmd.carType,
-          plateNumber: cmd.plateNumber,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        if (data.suggestions && data.suggestions.length > 0) {
-          return `⚠️ يوجد ${data.suggestions.length} رول مطابق لكود "${c.rollCode}":\n${data.suggestions.map((s: string) => `• ${s}`).join('\n')}\n\nحدد الكود الكامل.`
-        }
-        return `❌ ${data.error}`
+      // Fuzzy match the roll
+      const partialUpper = c.rollCode.toUpperCase().trim()
+      const exact = await db.roll.findUnique({ where: { code: partialUpper } })
+      let rolls = exact ? [exact] : []
+      if (rolls.length === 0) {
+        rolls = await db.roll.findMany({
+          where: {
+            OR: [
+              { code: { contains: partialUpper, mode: 'insensitive' } },
+              { brand: { contains: c.rollCode, mode: 'insensitive' } },
+              { type: { contains: c.rollCode, mode: 'insensitive' } },
+            ],
+          },
+          take: 5,
+        })
       }
-      return data.message
+
+      if (rolls.length === 0) {
+        return `❌ لم أجد رول بكود "${c.rollCode}". اكتب: دور على رول ${c.rollCode} للبحث الجزئي.`
+      }
+      if (rolls.length > 1) {
+        return `⚠️ يوجد ${rolls.length} رول مطابق لكود "${c.rollCode}":\n${rolls.map(r => `• ${r.code} — ${r.brand} ${r.type} (متبقي ${r.remainingLength?.toFixed(1)}م)`).join('\n')}\n\nحدد الكود الكامل.`
+      }
+
+      const roll = rolls[0]
+      const metersUsed = Number(c.metersUsed) || 0
+      const waste = Number(c.waste) || 0
+      const totalUsed = metersUsed + waste
+
+      if (totalUsed > (roll.remainingLength || 0)) {
+        return `❌ الرصيد غير كافٍ في الرول ${roll.code}. المتبقي ${roll.remainingLength?.toFixed(2)}م، المطلوب ${totalUsed}م`
+      }
+
+      // Generate OB if not provided
+      let workOrder = cmd.workOrder
+      if (!workOrder) {
+        const allConsumptions = await db.rollConsumption.findMany({
+          where: { workOrder: { startsWith: 'OB-' } },
+        })
+        const obNums = allConsumptions
+          .map(x => x.workOrder?.match(/OB-(\d+)/)?.[1])
+          .filter(Boolean)
+          .map(x => parseInt(x!, 10))
+        const maxNum = obNums.length > 0 ? Math.max(...obNums) : 0
+        workOrder = `OB-${String(maxNum + 1).padStart(4, '0')}`
+      }
+
+      const consumption = await db.rollConsumption.create({
+        data: {
+          rollId: roll.id,
+          rollCode: roll.code,
+          date: new Date(),
+          clientName: cmd.clientName || null,
+          carType: cmd.carType || null,
+          plateNumber: cmd.plateNumber || null,
+          metersUsed,
+          waste,
+          usageArea: c.usageArea || null,
+          workOrder,
+          notes: null,
+          technician: null,
+          transactionType: 'استهلاك',
+        },
+      })
+
+      const newRemaining = (roll.remainingLength || 0) - totalUsed
+      let newStatus = 'active'
+      if (newRemaining <= 0) newStatus = 'finished'
+      else if (newRemaining <= 2) newStatus = 'low'
+
+      const newCarsCount = cmd.clientName ? (roll.carsCount || 0) + 1 : roll.carsCount
+      await db.roll.update({
+        where: { id: roll.id },
+        data: {
+          remainingLength: newRemaining,
+          status: newStatus,
+          carsCount: newCarsCount,
+        },
+      })
+
+      return `✅ تم تسجيل استهلاك ${metersUsed}م من الرول ${roll.code} بأمر الشغل ${workOrder}. المتبقي: ${newRemaining.toFixed(2)}م`
     }
 
     if (cmd.action === 'multi_roll') {
-      // For multi-roll, we need the user to provide the rolls and meters
-      // The AI will guide them through it
       return `📋 **تسجيل متعدد الرولات على نفس أمر الشغل (OB)**
 
-للتسجيل، اكتب:
-\`\`\`
-رولات: HXS-BF-001 5م, 3M-SG-002 3.5م, DNS-TPU-001 4م
-العميل: محمد أحمد
-السيارة: مرسيدس C200
-OB: OB-0020 (أو اكتب "تلقائي")
-\`\`\`
-
-أو بصيغة مبسطة:
+للتسجيل، اكتب كل رول في سطر منفصل:
 \`\`\`
 سجل بـ OB-0020
-العميل: محمد
-الرولات:
-HXS-BF-001 = 5م
-3M-SG-002 = 3.5م
+العميل: محمد أحمد
+السيارة: مرسيدس C200
+HXS-BF-001 5م
+3M-SG-002 3.5م
+DNS-TPU-001 4م
 \`\`\`
 
-📌 **ملاحظة:** كل سطر = رول واحد. سيتم خصم الأمتار تلقائياً من كل رول وربطهم بنفس أمر الشغل.`
+📌 **ملاحظة:** سيتم خصم الأمتار تلقائياً من كل رول وربطهم بنفس أمر الشغل (${cmd.workOrder || 'تلقائي'}).`
     }
   } catch (e: any) {
     return `❌ خطأ في تنفيذ الأمر: ${e.message}`
