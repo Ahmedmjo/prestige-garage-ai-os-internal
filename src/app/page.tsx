@@ -16,6 +16,7 @@ import { NotificationBell } from '@/components/prestige/notification-bell'
 import { LanguageToggle } from '@/components/prestige/language-toggle'
 import { PrestigeLogo } from '@/components/prestige/logo'
 import { BackgroundDecoration } from '@/components/prestige/background'
+import { PWAInstallButton } from '@/components/prestige/pwa-install-button'
 import { Dashboard } from '@/components/modules/dashboard'
 import { RollsModule } from '@/components/modules/rolls-module'
 import { EmployeesModule } from '@/components/modules/employees-module'
@@ -148,6 +149,7 @@ export default function Home() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <PWAInstallButton />
             <LanguageToggle />
             <NotificationBell />
           </div>

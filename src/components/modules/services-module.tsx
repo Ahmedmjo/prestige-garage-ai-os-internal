@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import {
-  Wrench, Plus, Search, DollarSign,
+  Wrench, Plus, Search, DollarSign, Pencil, Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -12,6 +12,10 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogAction, AlertDialogCancel,
+} from '@/components/ui/alert-dialog'
 import { toast } from 'sonner'
 import { useI18n } from '@/lib/i18n-context'
 import { categorizeService, unifyServiceType } from '@/lib/i18n'
@@ -64,6 +68,8 @@ export function ServicesModule() {
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [showAddDialog, setShowAddDialog] = useState(false)
+  const [editService, setEditService] = useState<Service | null>(null)
+  const [deleteService, setDeleteService] = useState<Service | null>(null)
 
   useEffect(() => {
     loadServices()
@@ -107,6 +113,21 @@ export function ServicesModule() {
     byType[unifiedType].total += s.price
   }
   const typeStats = Object.entries(byType).sort((a, b) => b[1].total - a[1].total)
+
+  async function handleDelete(s: Service) {
+    try {
+      const res = await fetch(`/api/services/${s.id}`, { method: 'DELETE' })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || 'فشل الحذف')
+      }
+      toast.success(`تم حذف الخدمة ${s.code}`)
+      setDeleteService(null)
+      loadServices()
+    } catch (e: any) {
+      toast.error(e.message)
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -244,6 +265,7 @@ export function ServicesModule() {
                   <th className="py-3 px-4 text-gray-400 font-medium">{lang === 'ar' ? 'تفاصيل' : 'Details'}</th>
                   <th className="py-3 px-4 text-gray-400 font-medium">{t('technician')}</th>
                   <th className="py-3 px-4 text-gray-400 font-medium text-left">{t('price')}</th>
+                  <th className="py-3 px-4 text-gray-400 font-medium text-center sticky left-0 bg-[#0A0A0A]">{lang === 'ar' ? 'إجراءات' : 'Actions'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -276,6 +298,30 @@ export function ServicesModule() {
                     <td className="py-3 px-4 text-left font-bold text-[#00C853]">
                       {new Intl.NumberFormat('en-US').format(s.price)} {t('egp')}
                     </td>
+                    <td className="py-3 px-4 sticky left-0 bg-[#0A0A0A]">
+                      <div className="flex items-center justify-center gap-1">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setEditService(s)
+                          }}
+                          className="p-1.5 rounded-md hover:bg-[#03DAC6]/20 text-[#03DAC6] transition-colors"
+                          title={lang === 'ar' ? 'تعديل' : 'Edit'}
+                        >
+                          <Pencil size={14} />
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDeleteService(s)
+                          }}
+                          className="p-1.5 rounded-md hover:bg-[#DC143C]/20 text-[#DC143C] transition-colors"
+                          title={lang === 'ar' ? 'حذف' : 'Delete'}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -285,6 +331,37 @@ export function ServicesModule() {
       )}
 
       <AddServiceDialog open={showAddDialog} onOpenChange={setShowAddDialog} onSuccess={loadServices} />
+      {editService && (
+        <EditServiceDialog
+          service={editService}
+          open={!!editService}
+          onOpenChange={(v) => !v && setEditService(null)}
+          onSuccess={loadServices}
+        />
+      )}
+      {deleteService && (
+        <AlertDialog open={!!deleteService} onOpenChange={(v) => !v && setDeleteService(null)}>
+          <AlertDialogContent className="bg-[#0A0A0A] border-white/10 text-white" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-white">{lang === 'ar' ? 'تأكيد الحذف' : 'Confirm Delete'}</AlertDialogTitle>
+              <AlertDialogDescription className="text-gray-400">
+                {lang === 'ar'
+                  ? `هل أنت متأكد من حذف الخدمة ${deleteService.code}؟ سيتم حذف العمولة المرتبطة بها أيضاً. لا يمكن التراجع عن هذا الإجراء.`
+                  : `Are you sure you want to delete service ${deleteService.code}? Linked commission will also be deleted. This cannot be undone.`}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="text-gray-400">{t('cancel')}</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => handleDelete(deleteService)}
+                className="bg-[#DC143C] text-white hover:bg-[#DC143C]/80"
+              >
+                {lang === 'ar' ? 'حذف' : 'Delete'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </div>
   )
 }
@@ -425,6 +502,141 @@ function AddServiceDialog({ open, onOpenChange, onSuccess }: {
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-gray-400">{t('cancel')}</Button>
           <Button onClick={handleSubmit} disabled={saving} className="prestige-gradient border-0">
             {saving ? t('saving') : (lang === 'ar' ? 'تسجيل الخدمة' : 'Record Service')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── Edit Service Dialog ─────────────────────────────────
+function EditServiceDialog({ service, open, onOpenChange, onSuccess }: {
+  service: Service
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  onSuccess: () => void
+}) {
+  const { t, lang } = useI18n()
+  const [form, setForm] = useState({
+    code: service.code,
+    date: new Date(service.date).toISOString().split('T')[0],
+    plate: service.plate || '',
+    clientName: service.clientName || '',
+    carType: service.carType || '',
+    serviceType: service.serviceType,
+    price: String(service.price),
+    paymentMethod: service.paymentMethod || 'كاش',
+    technician: service.technician || '',
+    notes: service.notes || '',
+    commissionAmount: '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  async function handleSubmit() {
+    if (!form.serviceType || !form.price) {
+      toast.error(lang === 'ar' ? 'نوع الخدمة والسعر مطلوبان' : 'Service type and price required')
+      return
+    }
+    setSaving(true)
+    try {
+      const res = await fetch(`/api/services/${service.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(form),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err.error || (lang === 'ar' ? 'فشل التعديل' : 'Failed'))
+      }
+      toast.success(lang === 'ar' ? 'تم تعديل الخدمة بنجاح' : 'Service updated successfully')
+      onOpenChange(false)
+      onSuccess()
+    } catch (e: any) {
+      toast.error(e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-[#0A0A0A] border-white/10 text-white max-w-2xl max-h-[90vh] overflow-y-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+        <DialogHeader>
+          <DialogTitle className="text-white flex items-center gap-2">
+            <Pencil size={18} className="text-[#03DAC6]" />
+            {lang === 'ar' ? `تعديل الخدمة ${service.code}` : `Edit Service ${service.code}`}
+          </DialogTitle>
+        </DialogHeader>
+        <div className="grid grid-cols-2 gap-3 py-2">
+          <div>
+            <Label className="text-gray-400 text-xs">{t('code')}</Label>
+            <Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('date')}</Label>
+            <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('client')}</Label>
+            <Input value={form.clientName} onChange={e => setForm({ ...form, clientName: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('car')}</Label>
+            <Input value={form.carType} onChange={e => setForm({ ...form, carType: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('plate')}</Label>
+            <Input value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'نوع الخدمة *' : 'Service Type *'}</Label>
+            <select
+              value={form.serviceType}
+              onChange={e => setForm({ ...form, serviceType: e.target.value })}
+              className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-1"
+            >
+              {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('price')} ({t('egp')}) *</Label>
+            <Input type="number" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('payment')}</Label>
+            <select
+              value={form.paymentMethod}
+              onChange={e => setForm({ ...form, paymentMethod: e.target.value })}
+              className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-1"
+            >
+              {PAYMENT_METHODS.map(p => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{t('technician')}</Label>
+            <Input value={form.technician} onChange={e => setForm({ ...form, technician: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'العمولة' : 'Commission'} ({t('egp')})</Label>
+            <Input type="number" value={form.commissionAmount} onChange={e => setForm({ ...form, commissionAmount: e.target.value })} placeholder={lang === 'ar' ? 'اتركها فارغة للحفاظ على القيمة الحالية' : 'Leave empty to keep current'} className="bg-[#000] border-white/10 text-white mt-1" />
+          </div>
+          {form.serviceType !== 'أخرى' && (
+            <div className="col-span-2">
+              <Label className="text-gray-400 text-xs">{t('notes')}</Label>
+              <Textarea value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" rows={2} />
+            </div>
+          )}
+          {form.serviceType === 'أخرى' && (
+            <div className="col-span-2">
+              <Label className="text-[#FF9100] text-xs">{lang === 'ar' ? 'تحديد نوع الخدمة (للأخرى)' : 'Specify Service Type (Other)'}</Label>
+              <Input value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} className="bg-[#000] border-[#FF9100]/30 text-white mt-1" />
+            </div>
+          )}
+        </div>
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-gray-400">{t('cancel')}</Button>
+          <Button onClick={handleSubmit} disabled={saving} className="prestige-gradient border-0">
+            {saving ? t('saving') : (lang === 'ar' ? 'حفظ التعديلات' : 'Save Changes')}
           </Button>
         </DialogFooter>
       </DialogContent>

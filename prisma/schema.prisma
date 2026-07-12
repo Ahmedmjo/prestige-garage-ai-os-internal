@@ -72,6 +72,8 @@ model Employee {
   jobTitle      String?
   status        String   @default("نشط") // نشط | متوقف | محذوف
   notes         String?
+  serviceType   String?
+  dashboardCategory String?
   createdAt     DateTime @default(now())
 
   attendance    Attendance[]
@@ -260,4 +262,114 @@ model Alert {
   createdAt     DateTime @default(now())
 
   @@map("alerts")
+}
+
+// ════════════════════════════════════════════════════════════════
+// 📝 Service Logs — سجل الخدمات والعمولات (من ملف المحاسبة)
+// ════════════════════════════════════════════════════════════════
+
+model ServiceLog {
+  id            String   @id @default(cuid())
+  seqNo         Int
+  date          DateTime?
+  month         Int?
+  technicianName String?
+  clientName    String?
+  carType       String?
+  serviceType   String?
+  commissionAmount Float @default(0)
+  notes         String?
+  serviceCategory String?
+  cleanerName   String?
+  cleanerNotes  String?
+  digitalCommission Float @default(0)
+  createdAt     DateTime @default(now())
+
+  @@map("service_logs")
+}
+
+// ════════════════════════════════════════════════════════════════
+// 🛠️ Tools Movements — الأدوات والمعدات
+// ════════════════════════════════════════════════════════════════
+
+model ToolsMovement {
+  id            String   @id @default(cuid())
+  seqNo         Int?
+  date          DateTime?
+  toolName      String
+  category      String?
+  movementType  String?
+  quantity      Float    @default(0)
+  unit          String?
+  unitPrice     Float    @default(0)
+  totalCost     Float    @default(0)
+  permitNumber  String?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@map("tools_movements")
+}
+
+// ════════════════════════════════════════════════════════════════
+// 🏷️ Reference Data — القوائم المرجعية
+// ════════════════════════════════════════════════════════════════
+
+model BrandsReference {
+  id            String   @id @default(cuid())
+  brandName     String
+  brandCode     String
+  defaultType   String?
+  createdAt     DateTime @default(now())
+
+  @@map("brands_reference")
+}
+
+model MovementTypeReference {
+  id            String   @id @default(cuid())
+  name          String
+  category      String?
+  createdAt     DateTime @default(now())
+
+  @@map("movement_types_reference")
+}
+
+model ReferenceData {
+  id            String   @id @default(cuid())
+  listName      String
+  value         String
+  sortOrder     Int      @default(0)
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@map("reference_data")
+}
+
+model OperationCode {
+  id            String   @id @default(cuid())
+  code          String
+  description   String?
+  category      String?
+  createdAt     DateTime @default(now())
+
+  @@map("operation_codes")
+}
+
+model MonthlyPayrollSummary {
+  id            String   @id @default(cuid())
+  employeeName  String
+  month         Int
+  year          Int
+  presentDays   Int      @default(0)
+  absentDays    Int      @default(0)
+  weeklyLeaveDays Int    @default(0)
+  officialLeaveDays Int  @default(0)
+  totalCommission Float  @default(0)
+  totalAdvances Float    @default(0)
+  totalPenalties Float   @default(0)
+  netSalary     Float    @default(0)
+  balanceDue    Float    @default(0)
+  createdAt     DateTime @default(now())
+
+  @@unique([employeeName, month, year])
+  @@map("monthly_payroll_summary")
 }

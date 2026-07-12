@@ -1,0 +1,57 @@
+{
+  "name": "Prestige Garage AI-OS",
+  "short_name": "Prestige",
+  "description": "نظام إدارة ذكي داخلي لمركز Prestige Garage للعناية بالسيارات الفاخرة",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#000000",
+  "theme_color": "#DC143C",
+  "lang": "ar",
+  "dir": "rtl",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "لوحة التحكم",
+      "short_name": "الرئيسية",
+      "url": "/?tab=dashboard"
+    },
+    {
+      "name": "الرولات",
+      "short_name": "الرولات",
+      "url": "/?tab=rolls"
+    },
+    {
+      "name": "المساعد الذكي",
+      "short_name": "AI",
+      "url": "/?tab=ai"
+    }
+  ]
+}
