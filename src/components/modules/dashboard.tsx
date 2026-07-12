@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { motion } from 'framer-motion'
 import {
   DollarSign, Film, Users, Wrench, Package, Bell,
-  TrendingUp, AlertTriangle, ArrowLeft, Bot,
+  TrendingUp, AlertTriangle, ArrowLeft, Bot, Shield,
 } from 'lucide-react'
 import {
   AreaChart, Area, BarChart, Bar, PieChart, Pie, Cell, LineChart, Line,
@@ -22,6 +23,7 @@ interface DashboardData {
     rollsCount: number
     activeRolls: number
     lowRolls: number
+    criticalRolls?: number
     finishedRolls: number
     employeesCount: number
     servicesCount: number
@@ -32,8 +34,19 @@ interface DashboardData {
     outOfStockCount: number
     inventoryValue: number
     rollsValue: number
+    rollsFullValue?: number
+    rollsConsumedValue?: number
     unreadAlerts: number
     criticalAlerts: number
+  }
+  protection?: {
+    nextOB: string
+    totalOBs: number
+    totalMetersUsed: number
+    totalWaste: number
+    recentOBs: any[]
+    rollsByStatus: { active: number; low: number; critical: number; finished: number }
+    totalRemainingMeters: number
   }
   revenueByType: { type: string; count: number; total: number; average: number }[]
   revenueByCategory: { key: string; label: string; count: number; total: number; average: number }[]
@@ -187,6 +200,117 @@ export function Dashboard({ onNavigate }: DashboardProps) {
         <StatCard title={t('totalInvoices')} value={formatCurrency(stats.invoicesTotal, lang)} subtitle={`${stats.invoicesCount} ${lang === 'ar' ? 'فاتورة' : 'invoices'}`} icon={Wrench} color="#FFD600" delay={0.35} />
         <StatCard title={t('activeAlerts')} value={formatNumber(stats.unreadAlerts, lang)} subtitle={`${stats.criticalAlerts} ${t('critical')}`} icon={Bell} color="#FF1744" delay={0.4} />
       </div>
+
+      {/* Protection (PPF) Quick Stats — new */}
+      {data.protection && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.42 }}
+          className="prestige-card p-5"
+          style={{ background: 'linear-gradient(135deg, rgba(0,200,83,0.06) 0%, rgba(0,200,83,0.02) 100%)', borderTop: '2px solid #00C853' }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Shield size={18} className="text-[#00C853]" />
+              <h3 className="font-bold text-white">{lang === 'ar' ? 'لوحة البروتيكشن (PPF)' : 'Protection Dashboard'}</h3>
+            </div>
+            <button
+              onClick={() => onNavigate('protection')}
+              className="text-xs text-[#00C853] hover:underline"
+            >
+              {lang === 'ar' ? 'عرض التفاصيل ←' : 'View details ←'}
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+            <div className="text-center">
+              <p className="text-xs text-gray-500">{lang === 'ar' ? 'أمر الشغل التالي' : 'Next OB'}</p>
+              <p className="text-lg font-bold text-[#00C853] font-mono mt-1">{data.protection.nextOB}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500">{lang === 'ar' ? 'إجمالي OBs' : 'Total OBs'}</p>
+              <p className="text-lg font-bold text-white mt-1">{data.protection.totalOBs}</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500">{lang === 'ar' ? 'إجمالي الأمتار' : 'Total Meters'}</p>
+              <p className="text-lg font-bold text-[#03DAC6] mt-1">{data.protection.totalMetersUsed.toFixed(1)} م</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500">{lang === 'ar' ? 'إجمالي الهالك' : 'Total Waste'}</p>
+              <p className="text-lg font-bold text-[#DC143C] mt-1">{data.protection.totalWaste.toFixed(1)} م</p>
+            </div>
+            <div className="text-center">
+              <p className="text-xs text-gray-500">{lang === 'ar' ? 'المتبقي بالكامل' : 'Total Remaining'}</p>
+              <p className="text-lg font-bold text-[#FF9100] mt-1">{data.protection.totalRemainingMeters.toFixed(1)} م</p>
+            </div>
+          </div>
+
+          {/* Roll status bar */}
+          <div className="space-y-2">
+            <p className="text-xs text-gray-500">{lang === 'ar' ? 'حالة الرولات' : 'Rolls Status'}</p>
+            <div className="flex h-3 rounded-full overflow-hidden">
+              <div
+                className="bg-[#00C853]"
+                style={{ width: `${(data.protection.rollsByStatus.active / Math.max(stats.rollsCount, 1)) * 100}%` }}
+                title={`نشط: ${data.protection.rollsByStatus.active}`}
+              />
+              <div
+                className="bg-[#FF9100]"
+                style={{ width: `${(data.protection.rollsByStatus.low / Math.max(stats.rollsCount, 1)) * 100}%` }}
+                title={`أوشك: ${data.protection.rollsByStatus.low}`}
+              />
+              <div
+                className="bg-[#FF4500]"
+                style={{ width: `${(data.protection.rollsByStatus.critical / Math.max(stats.rollsCount, 1)) * 100}%` }}
+                title={`حرج: ${data.protection.rollsByStatus.critical}`}
+              />
+              <div
+                className="bg-[#DC143C]"
+                style={{ width: `${(data.protection.rollsByStatus.finished / Math.max(stats.rollsCount, 1)) * 100}%` }}
+                title={`منتهي: ${data.protection.rollsByStatus.finished}`}
+              />
+            </div>
+            <div className="flex flex-wrap gap-3 text-xs text-gray-400">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-[#00C853]" />
+                {data.protection.rollsByStatus.active} {lang === 'ar' ? 'نشط' : 'active'}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-[#FF9100]" />
+                {data.protection.rollsByStatus.low} {lang === 'ar' ? 'أوشك' : 'low'}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-[#FF4500]" />
+                {data.protection.rollsByStatus.critical} {lang === 'ar' ? 'حرج' : 'critical'}
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-[#DC143C]" />
+                {data.protection.rollsByStatus.finished} {lang === 'ar' ? 'منتهي' : 'finished'}
+              </span>
+            </div>
+          </div>
+
+          {/* Recent OBs */}
+          {data.protection.recentOBs && data.protection.recentOBs.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-white/5">
+              <p className="text-xs text-gray-500 mb-2">{lang === 'ar' ? 'أحدث أوامر الشغل' : 'Recent Work Orders'}</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                {data.protection.recentOBs.slice(0, 3).map((ob: any, i: number) => (
+                  <div key={i} className="rounded-md p-2 bg-white/5 border border-white/5 text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-mono font-bold text-[#00C853]">{ob.workOrder}</span>
+                      <span className="text-gray-500">{new Date(ob.date).toLocaleDateString('en-GB')}</span>
+                    </div>
+                    <p className="text-white truncate">{ob.clientName || '-'}</p>
+                    <p className="text-gray-400 text-[10px]">{ob.totalMeters.toFixed(1)} م · {ob.rollsCount} رولات</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       {/* Charts row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

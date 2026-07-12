@@ -12,6 +12,7 @@ import {
   X,
   Calendar,
   Shield,
+  Settings as SettingsIcon,
 } from 'lucide-react'
 import { useI18n } from '@/lib/i18n-context'
 import { NotificationBell } from '@/components/prestige/notification-bell'
@@ -27,8 +28,9 @@ import { ServicesModule } from '@/components/modules/services-module'
 import { AIChat } from '@/components/modules/ai-chat'
 import { AttendanceModule } from '@/components/modules/attendance-module'
 import { ProtectionModule } from '@/components/modules/protection-module'
+import { SettingsModule } from '@/components/modules/settings-module'
 
-type TabId = 'dashboard' | 'rolls' | 'protection' | 'employees' | 'attendance' | 'stock' | 'services' | 'ai'
+type TabId = 'dashboard' | 'rolls' | 'protection' | 'employees' | 'attendance' | 'stock' | 'services' | 'ai' | 'settings'
 
 export default function Home() {
   const { t, lang, dir } = useI18n()
@@ -44,6 +46,7 @@ export default function Home() {
     { id: 'stock', label: t('stock'), icon: Package, color: '#BB86FC' },
     { id: 'services', label: t('services'), icon: Wrench, color: '#03DAC6' },
     { id: 'ai', label: t('aiAssistant'), icon: Bot, color: '#DC143C' },
+    { id: 'settings', label: lang === 'ar' ? 'الإعدادات' : 'Settings', icon: SettingsIcon, color: '#888888' },
   ]
 
   // Lock body scroll when sidebar is open on mobile
@@ -183,6 +186,7 @@ export default function Home() {
           {activeTab === 'stock' && <StockModule />}
           {activeTab === 'services' && <ServicesModule />}
           {activeTab === 'ai' && <AIChat />}
+          {activeTab === 'settings' && <SettingsModule />}
         </main>
       </div>
     </div>

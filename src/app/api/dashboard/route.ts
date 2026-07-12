@@ -93,12 +93,77 @@ export async function GET() {
     const monthAttendance = await db.attendance.findMany({
       where: { month: currentMonth, year: currentYear },
     })
+    // Normalize status — support both short codes and full words
     const attendanceSummary = {
-      present: monthAttendance.filter(a => a.status === 'ح').length,
-      absent: monthAttendance.filter(a => a.status === 'غ').length,
-      officialLeave: monthAttendance.filter(a => a.status === 'إ').length,
-      weeklyLeave: monthAttendance.filter(a => a.status === 'ر').length,
+      present: monthAttendance.filter(a => a.status === 'ح' || a.status === 'حضور').length,
+      absent: monthAttendance.filter(a => a.status === 'غ' || a.status === 'غياب').length,
+      officialLeave: monthAttendance.filter(a => a.status === 'إ' || a.status === 'إجازة' || a.status === 'إجازة أسبوعية').length,
+      weeklyLeave: monthAttendance.filter(a => a.status === 'ر' || a.status === 'راحة').length,
     }
+
+    // ─── Protection (PPF) summary ─────────────────────────────
+    // Group consumptions by OB (work order)
+    const obGroups: Record<string, any> = {}
+    for (const c of consumptions) {
+      if (!c.workOrder) continue
+      if (!obGroups[c.workOrder]) {
+        obGroups[c.workOrder] = {
+          workOrder: c.workOrder,
+          clientName: c.clientName,
+          carType: c.carType,
+          date: c.date,
+          totalMeters: 0,
+          rollsCount: 0,
+        }
+      }
+      obGroups[c.workOrder].totalMeters += c.metersUsed || 0
+      obGroups[c.workOrder].rollsCount++
+    }
+    const obList = Object.values(obGroups).sort((a: any, b: any) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    )
+
+    // Next OB number
+    const obNumbers = Object.keys(obGroups).filter(w => w.startsWith('OB-'))
+    let nextOBNum = 1
+    for (const w of obNumbers) {
+      const m = w.match(/OB-(\d+)/)
+      if (m) {
+        const n = parseInt(m[1], 10)
+        if (n >= nextOBNum) nextOBNum = n + 1
+      }
+    }
+    const nextOB = `OB-${String(nextOBNum).padStart(4, '0')}`
+
+    // Total meters used (all time)
+    const totalMetersUsed = consumptions.reduce((s, c) => s + (c.metersUsed || 0), 0)
+    const totalWaste = consumptions.reduce((s, c) => s + (c.waste || 0), 0)
+
+    // Thresholds for roll status
+    const lowThreshold = 5
+    const criticalThreshold = 2
+
+    const rollsByStatus = {
+      active: rolls.filter(r => (r.remainingLength || 0) > lowThreshold).length,
+      low: rolls.filter(r => {
+        const rem = r.remainingLength || 0
+        return rem > criticalThreshold && rem <= lowThreshold
+      }).length,
+      critical: rolls.filter(r => {
+        const rem = r.remainingLength || 0
+        return rem > 0 && rem <= criticalThreshold
+      }).length,
+      finished: rolls.filter(r => (r.remainingLength || 0) <= 0).length,
+    }
+
+    // Inventory financial summary
+    const rollsFullValue = rolls.reduce((s, r) => s + (r.price || 0), 0)
+    const rollsConsumedValue = rolls.reduce((s, r) => {
+      const remaining = r.remainingLength || 0
+      const total = r.totalLength || 1
+      const consumed = total - remaining
+      return s + ((r.price || 0) * (consumed / total))
+    }, 0)
 
     // ALL employees with commissions this month — show everyone who has commissions
     const monthCommissions = commissions.filter(c => c.month === currentMonth && c.year === currentYear)
@@ -136,9 +201,10 @@ export async function GET() {
       stats: {
         totalRevenue: services.reduce((s, x) => s + x.price, 0),
         rollsCount: rolls.length,
-        activeRolls: rolls.filter(r => r.status === 'active').length,
-        lowRolls: rolls.filter(r => r.status === 'low').length,
-        finishedRolls: rolls.filter(r => r.status === 'finished').length,
+        activeRolls: rollsByStatus.active,
+        lowRolls: rollsByStatus.low,
+        criticalRolls: rollsByStatus.critical,
+        finishedRolls: rollsByStatus.finished,
         employeesCount: employees.filter(e => e.status === 'نشط').length,
         servicesCount: services.length,
         invoicesCount: invoices.length,
@@ -148,8 +214,19 @@ export async function GET() {
         outOfStockCount: stockItems.filter(s => s.status === 'نفد').length,
         inventoryValue: Math.round(inventoryValue),
         rollsValue: Math.round(rollsValue),
+        rollsFullValue: Math.round(rollsFullValue),
+        rollsConsumedValue: Math.round(rollsConsumedValue),
         unreadAlerts: alerts.length,
         criticalAlerts: alerts.filter(a => a.severity === 'critical').length,
+      },
+      protection: {
+        nextOB,
+        totalOBs: obList.length,
+        totalMetersUsed: parseFloat(totalMetersUsed.toFixed(2)),
+        totalWaste: parseFloat(totalWaste.toFixed(2)),
+        recentOBs: obList.slice(0, 5),
+        rollsByStatus,
+        totalRemainingMeters: parseFloat(rolls.reduce((s, r) => s + (r.remainingLength || 0), 0).toFixed(2)),
       },
       revenueByType: Object.entries(revenueByType).map(([type, v]) => ({
         type,
