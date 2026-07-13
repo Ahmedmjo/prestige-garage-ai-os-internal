@@ -113,29 +113,43 @@ export function AttendanceGrid({ open, onOpenChange, employees, preselectedEmp, 
   async function handleSave() {
     setSaving(true)
     try {
-      let totalSaved = 0
-      for (const emp of activeEmployees) {
+      // إرسال كل الأيام (حتى الفاضية) عشان الـ API يعرف يفرّق بين "عدّل" و"امسح"
+      // الأيام الفاضية (status = '') هتتسجل في الـ API عشان تتمسح من الـ DB
+      const allEmployeeDays = activeEmployees.map(emp => {
         const empGrid = grid[emp.id] || {}
         const days = Object.entries(empGrid).map(([day, status]) => ({
           day: Number(day),
-          status,
-        })).filter(d => d.status)
-        if (days.length === 0) continue
+          status: status || '',  // نحافظ على الـ status الفاضي
+        }))
+        return { employeeId: emp.id, days }
+      }).filter(e => e.days.length > 0)
 
-        const res = await fetch('/api/attendance/batch', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            employeeId: emp.id,
-            month,
-            year,
-            days,
-          }),
-        })
-        if (!res.ok) throw new Error(lang === 'ar' ? 'فشل الحفظ' : 'Save failed')
-        totalSaved += days.length
+      if (allEmployeeDays.length === 0) {
+        toast.info(lang === 'ar' ? 'لا توجد تغييرات للحفظ' : 'No changes to save')
+        return
       }
-      toast.success(lang === 'ar' ? `تم حفظ ${totalSaved} سجل حضور` : `Saved ${totalSaved} attendance records`)
+
+      // طلب واحد فيه كل الموظفين والأيام
+      const res = await fetch('/api/attendance/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          month,
+          year,
+          employees: allEmployeeDays,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error || (lang === 'ar' ? 'فشل الحفظ' : 'Save failed'))
+      }
+
+      const result = await res.json()
+      const msg = lang === 'ar'
+        ? `تم الحفظ بنجاح: ${result.created || 0} جديد، ${result.updated || 0} تحديث، ${result.deleted || 0} حذف`
+        : `Saved: ${result.created || 0} new, ${result.updated || 0} updated, ${result.deleted || 0} deleted`
+      toast.success(msg)
       onOpenChange(false)
       onSuccess()
     } catch (e: any) {
