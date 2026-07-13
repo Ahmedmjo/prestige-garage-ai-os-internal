@@ -38,68 +38,62 @@ export async function POST(req: NextRequest) {
         const status = entry.status || ''
         // timezone-safe: noon avoids UTC offset shifting to previous day
         const date = new Date(year, month - 1, day, 12, 0, 0, 0)
+        // For querying, use date range to match records stored at any time of that day
+        const dayStart = new Date(year, month - 1, day, 0, 0, 0, 0)
+        const dayEnd = new Date(year, month - 1, day, 23, 59, 59, 999)
 
         if (!status) {
-          // DELETE: status empty → remove the record
+          // DELETE: status empty → remove ALL records for this day (any time)
           try {
             const deletedRec = await db.attendance.deleteMany({
-              where: { employeeId, date },
+              where: {
+                employeeId,
+                date: { gte: dayStart, lte: dayEnd },
+              },
             })
             deleted += deletedRec.count
           } catch (delErr: any) {
             // ignore if not exists
           }
         } else {
-          // UPSERT: status present → create or update
+          // First, find existing record for this day (using range to handle timezone)
           try {
-            await db.attendance.upsert({
-              where: { employeeId_date: { employeeId, date } },
-              update: {
-                status,
-                month,
-                year,
-                employeeName: emp.name,
-              },
-              create: {
+            const existing = await db.attendance.findFirst({
+              where: {
                 employeeId,
-                employeeName: emp.name,
-                date,
-                status,
-                month,
-                year,
+                date: { gte: dayStart, lte: dayEnd },
               },
             })
-            // We can't reliably tell if it was create or update without an extra query
-            // so we'll just count it as "saved" — the toast will say "saved"
-            created++  // approximate (could be update)
-          } catch (upsertErr: any) {
-            // Fallback: try findFirst + update/create
-            try {
-              const existing = await db.attendance.findFirst({
-                where: { employeeId, date },
+
+            if (existing) {
+              // UPDATE existing record
+              await db.attendance.update({
+                where: { id: existing.id },
+                data: {
+                  status,
+                  month,
+                  year,
+                  employeeName: emp.name,
+                  date,  // normalize date to noon
+                },
               })
-              if (existing) {
-                await db.attendance.update({
-                  where: { id: existing.id },
-                  data: { status, month, year, employeeName: emp.name },
-                })
-                updated++
-              } else {
-                await db.attendance.create({
-                  data: {
-                    employeeId,
-                    employeeName: emp.name,
-                    date,
-                    status,
-                    month,
-                    year,
-                  },
-                })
-                created++
-              }
-            } catch (fallbackErr: any) {
-              errors.push(`${emp.name} - يوم ${day}: ${fallbackErr.message}`)
+              updated++
+            } else {
+              // CREATE new record
+              await db.attendance.create({
+                data: {
+                  employeeId,
+                  employeeName: emp.name,
+                  date,
+                  status,
+                  month,
+                  year,
+                },
+              })
+              created++
             }
+          } catch (recErr: any) {
+            errors.push(`${emp.name} - يوم ${day}: ${recErr.message}`)
           }
         }
       }
