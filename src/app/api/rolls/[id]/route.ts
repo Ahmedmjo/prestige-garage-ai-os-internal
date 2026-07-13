@@ -10,10 +10,11 @@ function suggestCode(brand: string, type: string, existingCount: number): string
 
 // PUT /api/rolls/[id] — update a roll record (including price, length, etc.)
 // When code changes, automatically updates all related consumption records' rollCode
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
     const body = await req.json()
-    const existing = await db.roll.findUnique({ where: { id: params.id } })
+    const existing = await db.roll.findUnique({ where: { id: id } })
     if (!existing) {
       return NextResponse.json({ error: 'الرول غير موجود' }, { status: 404 })
     }
@@ -44,7 +45,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 
     const updated = await db.roll.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         code: body.code ?? existing.code,
         brand: body.brand ?? existing.brand,
@@ -66,7 +67,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     let updatedConsumptions = 0
     if (isCodeChanged) {
       const updateResult = await db.rollConsumption.updateMany({
-        where: { rollId: params.id },
+        where: { rollId: id },
         data: { rollCode: body.code },
       })
       updatedConsumptions = updateResult.count
@@ -84,10 +85,11 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // DELETE /api/rolls/[id] — delete a roll (only if no consumptions linked)
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
     const existing = await db.roll.findUnique({
-      where: { id: params.id },
+      where: { id: id },
       include: { consumptions: true },
     })
     if (!existing) {
@@ -100,7 +102,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       }, { status: 400 })
     }
 
-    await db.roll.delete({ where: { id: params.id } })
+    await db.roll.delete({ where: { id: id } })
 
     return NextResponse.json({ success: true, message: `تم حذف الرول ${existing.code}` })
   } catch (e: any) {
@@ -109,9 +111,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
 }
 
 // GET /api/rolls/[id] — get roll with suggested code
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
-    const roll = await db.roll.findUnique({ where: { id: params.id } })
+    const roll = await db.roll.findUnique({ where: { id: id } })
     if (!roll) {
       return NextResponse.json({ error: 'الرول غير موجود' }, { status: 404 })
     }

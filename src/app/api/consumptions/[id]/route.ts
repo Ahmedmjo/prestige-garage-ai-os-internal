@@ -3,10 +3,11 @@ import { db } from '@/lib/db'
 
 // PUT /api/consumptions/[id] — update a consumption record
 // This will recalculate the roll's remaining length automatically
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const { id } = await params
     const body = await req.json()
-    const existing = await db.rollConsumption.findUnique({ where: { id: params.id } })
+    const existing = await db.rollConsumption.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'سجل الاستهلاك غير موجود' }, { status: 404 })
     }
@@ -65,7 +66,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     // Update the consumption record
     const updated = await db.rollConsumption.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         rollId: targetRoll.id,
         rollCode: targetRollCode,
@@ -109,9 +110,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
 // DELETE /api/consumptions/[id] — delete a consumption record
 // This will restore the roll's remaining length automatically
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const existing = await db.rollConsumption.findUnique({ where: { id: params.id } })
+    const { id } = await params
+    const existing = await db.rollConsumption.findUnique({ where: { id } })
     if (!existing) {
       return NextResponse.json({ error: 'سجل الاستهلاك غير موجود' }, { status: 404 })
     }
@@ -133,7 +135,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       })
     }
 
-    await db.rollConsumption.delete({ where: { id: params.id } })
+    await db.rollConsumption.delete({ where: { id } })
 
     return NextResponse.json({
       success: true,

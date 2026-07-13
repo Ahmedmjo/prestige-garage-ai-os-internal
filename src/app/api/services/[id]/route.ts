@@ -3,10 +3,11 @@ import { db } from '@/lib/db'
 import { unifyServiceType } from '@/lib/i18n'
 
 // PUT /api/services/[id] — update a service record
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
     const body = await req.json()
-    const existing = await db.service.findUnique({ where: { id: params.id } })
+    const existing = await db.service.findUnique({ where: { id: id } })
     if (!existing) {
       return NextResponse.json({ error: 'الخدمة غير موجودة' }, { status: 404 })
     }
@@ -14,7 +15,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     const unifiedType = body.serviceType ? unifyServiceType(body.serviceType) : existing.serviceType
 
     const updated = await db.service.update({
-      where: { id: params.id },
+      where: { id: id },
       data: {
         code: body.code ?? existing.code,
         date: body.date ? new Date(body.date) : existing.date,
@@ -78,9 +79,10 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 }
 
 // DELETE /api/services/[id] — delete a service record (and its linked commission)
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   try {
-    const existing = await db.service.findUnique({ where: { id: params.id } })
+    const existing = await db.service.findUnique({ where: { id: id } })
     if (!existing) {
       return NextResponse.json({ error: 'الخدمة غير موجودة' }, { status: 404 })
     }
@@ -90,7 +92,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
       where: { notes: { contains: existing.code } },
     })
 
-    await db.service.delete({ where: { id: params.id } })
+    await db.service.delete({ where: { id: id } })
 
     return NextResponse.json({ success: true, message: `تم حذف الخدمة ${existing.code}` })
   } catch (e: any) {
