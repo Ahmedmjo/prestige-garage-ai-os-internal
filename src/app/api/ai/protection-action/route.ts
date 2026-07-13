@@ -56,6 +56,17 @@ async function fuzzyMatchRoll(partial: string) {
   return rolls
 }
 
+// Normalize OB format: Bo020, bo020, bo-020, OB0020 → OB-0020
+function normalizeOB(workOrder: string | null | undefined): string | null {
+  if (!workOrder) return null
+  const w = workOrder.trim()
+  const obMatch = w.match(/(?:OB|BO|bo|Bo)[-\s]*(\d+)/i)
+  if (obMatch) {
+    return `OB-${obMatch[1].padStart(4, '0')}`
+  }
+  return w || null
+}
+
 // Generate next OB number
 async function generateNextOB(): Promise<string> {
   const lastConsumption = await db.rollConsumption.findFirst({
@@ -150,7 +161,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Auto-generate OB if not provided
-        const workOrder = body.workOrder || await generateNextOB()
+        const workOrder = normalizeOB(body.workOrder) || await generateNextOB()
 
         const consumption = await db.rollConsumption.create({
           data: {
@@ -207,7 +218,7 @@ export async function POST(req: NextRequest) {
         }
 
         // Generate or use existing OB
-        const workOrder = body.workOrder || await generateNextOB()
+        const workOrder = normalizeOB(body.workOrder) || await generateNextOB()
 
         const results: any[] = []
         const errors: any[] = []

@@ -525,7 +525,7 @@ async function executeProtectionCommand(cmd: ParsedProtectionCommand): Promise<s
         return `❌ الرصيد غير كافٍ في الرول ${roll.code}. المتبقي ${roll.remainingLength?.toFixed(2)}م، المطلوب ${totalUsed}م`
       }
 
-      // Generate OB if not provided
+      // Generate OB if not provided, or normalize if provided (Bo020 → OB-0020)
       let workOrder = cmd.workOrder
       if (!workOrder) {
         const allConsumptions = await db.rollConsumption.findMany({
@@ -537,6 +537,12 @@ async function executeProtectionCommand(cmd: ParsedProtectionCommand): Promise<s
           .map(x => parseInt(x!, 10))
         const maxNum = obNums.length > 0 ? Math.max(...obNums) : 0
         workOrder = `OB-${String(maxNum + 1).padStart(4, '0')}`
+      } else {
+        // Normalize OB format: Bo020, bo020, bo-020, OB0020 → OB-0020
+        const obMatch = workOrder.match(/(?:OB|BO|bo|Bo)[-\s]*(\d+)/i)
+        if (obMatch) {
+          workOrder = `OB-${obMatch[1].padStart(4, '0')}`
+        }
       }
 
       const consumption = await db.rollConsumption.create({

@@ -1,6 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+// Normalize OB format: Bo020, bo020, bo-020, OB0020, OB 020 → OB-0020
+function normalizeOB(workOrder: string | null | undefined): string | null {
+  if (!workOrder) return null
+  const w = workOrder.trim()
+  const obMatch = w.match(/(?:OB|BO|bo|Bo)[-\s]*(\d+)/i)
+  if (obMatch) {
+    return `OB-${obMatch[1].padStart(4, '0')}`
+  }
+  return w || null
+}
+
 // POST /api/consumptions — record new roll consumption (auto-deduct + count cars)
 export async function POST(req: NextRequest) {
   try {
@@ -20,6 +31,9 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
+    // Normalize OB number
+    const workOrder = normalizeOB(body.workOrder)
+
     const consumption = await db.rollConsumption.create({
       data: {
         rollId: roll.id,
@@ -31,7 +45,7 @@ export async function POST(req: NextRequest) {
         metersUsed,
         waste,
         usageArea: body.usageArea || null,
-        workOrder: body.workOrder || null,
+        workOrder,
         notes: body.notes || null,
         technician: body.technician || null,
         transactionType: body.transactionType || 'استهلاك',
