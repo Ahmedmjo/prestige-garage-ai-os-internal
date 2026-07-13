@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 
+// Helper function to suggest a code based on brand + type
+function suggestCode(brand: string, type: string, existingCount: number): string {
+  const brandPrefix = (brand || 'GEN').slice(0, 3).toUpperCase()
+  const typePrefix = (type || 'GEN').slice(0, 3).toUpperCase()
+  return `${brandPrefix}-${typePrefix}-${String(existingCount + 1).padStart(3, '0')}`
+}
+
 // PUT /api/rolls/[id] — update a roll record (including price, length, etc.)
+// When code changes, automatically updates all related consumption records' rollCode
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await req.json()
@@ -11,7 +19,8 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
     }
 
     // If code is being changed, check uniqueness
-    if (body.code && body.code !== existing.code) {
+    const isCodeChanged = body.code && body.code !== existing.code
+    if (isCodeChanged) {
       const conflict = await db.roll.findUnique({ where: { code: body.code } })
       if (conflict) {
         return NextResponse.json({ error: `كود الرول ${body.code} موجود مسبقاً` }, { status: 400 })
@@ -26,7 +35,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       newRemaining = Math.max(0, newTotal - usedSoFar)
     }
 
-    // Determine new status
+    // Determine new status based on thresholds (5m, 2m, 0m)
     let newStatus = existing.status
     if (newRemaining !== existing.remainingLength) {
       newStatus = 'active'
@@ -53,7 +62,22 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       },
     })
 
-    return NextResponse.json(updated)
+    // If code changed, update ALL related consumption records' rollCode
+    let updatedConsumptions = 0
+    if (isCodeChanged) {
+      const updateResult = await db.rollConsumption.updateMany({
+        where: { rollId: params.id },
+        data: { rollCode: body.code },
+      })
+      updatedConsumptions = updateResult.count
+    }
+
+    return NextResponse.json({
+      ...updated,
+      _info: isCodeChanged
+        ? `تم تحديث ${updatedConsumptions} سجل استهلاك بالكود الجديد`
+        : undefined,
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
@@ -79,6 +103,24 @@ export async function DELETE(_req: NextRequest, { params }: { params: { id: stri
     await db.roll.delete({ where: { id: params.id } })
 
     return NextResponse.json({ success: true, message: `تم حذف الرول ${existing.code}` })
+  } catch (e: any) {
+    return NextResponse.json({ error: e.message }, { status: 500 })
+  }
+}
+
+// GET /api/rolls/[id] — get roll with suggested code
+export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+  try {
+    const roll = await db.roll.findUnique({ where: { id: params.id } })
+    if (!roll) {
+      return NextResponse.json({ error: 'الرول غير موجود' }, { status: 404 })
+    }
+    return NextResponse.json({
+      currentCode: roll.code,
+      brand: roll.brand,
+      type: roll.type,
+      suggestedCode: suggestCode(roll.brand, roll.type, 0),
+    })
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 })
   }
