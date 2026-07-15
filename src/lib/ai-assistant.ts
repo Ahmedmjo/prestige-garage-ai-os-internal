@@ -317,18 +317,17 @@ interface ParsedProtectionCommand {
 
 function parseProtectionCommand(message: string): ParsedProtectionCommand {
   const msg = message.trim()
-  const lower = msg.toLowerCase()
 
-  // Default response
+  // Default: NOT a protection command — let the AI handle it.
+  // The AI is smart enough to understand queries vs commands using the
+  // data snapshot, and it asks for confirmation before executing.
+  // This parser ONLY intercepts very explicit, unambiguous commands.
   const defaultRes: ParsedProtectionCommand = {
     isProtectionCommand: false,
     action: null,
   }
 
-  // Check for OB-related commands
-  const hasOB = /\bOB\b|أمر شغل|أمر الشغل|عملية|تسجيل بـ?\s*OB/i.test(msg)
-
-  // "نفس السابق" — same client, different roll
+  // "نفس السابق" — same client, different roll (explicit phrase)
   if (/نفس\s*(السابق|اللي قبل|قبلي)/i.test(msg)) {
     return {
       isProtectionCommand: true,
@@ -337,55 +336,46 @@ function parseProtectionCommand(message: string): ParsedProtectionCommand {
     }
   }
 
-  // Multi-roll registration: "رولات" + numbers
-  // e.g. "رولات 5" or "سجل 3 رولات" or "5 رولات على OB-0001"
-  const multiRollMatch = msg.match(/(\d+)\s*رولات|رولات\s*(\d+)|(\d+)\s*رول\s*على/i)
-  if (multiRollMatch || (/رولات/i.test(msg) && hasOB)) {
+  // Multi-roll registration: EXPLICIT verb + "رولات" + number
+  // e.g. "سجل 3 رولات" or "سجل 5 رولات على OB-0001"
+  if (/(سجل|تسجيل|سجلي)\s*.*\d+\s*رولات/i.test(msg) || /(\d+)\s*رولات\s*على\s*OB/i.test(msg)) {
     return {
       isProtectionCommand: true,
       action: 'multi_roll',
     }
   }
 
-  // "سجل بـ OB" or "تسجيل OB-XXXX"
-  if (/(سجل|تسجيل|سجلي|سجل\s*بـ?|اشرح|حط|ضيف)\s*(بـ?\s*)?OB/i.test(msg) || hasOB) {
-    // Try to extract OB number
+  // Explicit registration: action verb + "استهلاك" + roll code + meters
+  // e.g. "سجل استهلاك رول HXS-BF-001 بـ 2 متر" or "تسجيل استهلاك 3م من HXS-BF-001"
+  const hasRegisterVerb = /(سجل|تسجيل|سجلي)\s*(استهلاك|سحب)?/i.test(msg)
+  const hasConsumptionWord = /(استهلاك|اسحب|سحب)/i.test(msg)
+  const rollCodeMatch = msg.match(/([A-Z]{2,5}[-]?\w{0,3}[-]?\d{1,4})/i)
+  const metersMatch = msg.match(/(\d+\.?\d*)\s*م(?:تر|تر)?/)
+
+  if ((hasRegisterVerb && hasConsumptionWord) && rollCodeMatch && metersMatch) {
     const obMatch = msg.match(/OB[-\s]*(\d+)/i)
     const workOrder = obMatch ? `OB-${obMatch[1].padStart(4, '0')}` : undefined
-
-    // Try to extract roll code and meters
-    const rollCodeMatch = msg.match(/([A-Z]{2,5}[-_]?\w{0,3}[-_]?\d{1,4})/i)
-    const metersMatch = msg.match(/(\d+\.?\d*)\s*م/)
-
-    if (rollCodeMatch && metersMatch) {
-      return {
-        isProtectionCommand: true,
-        action: 'register',
-        workOrder,
-        consumptions: [{
-          rollCode: rollCodeMatch[1].toUpperCase().replace(/_/g, '-'),
-          metersUsed: parseFloat(metersMatch[1]),
-        }],
-      }
+    return {
+      isProtectionCommand: true,
+      action: 'register',
+      workOrder,
+      consumptions: [{
+        rollCode: rollCodeMatch[1].toUpperCase().replace(/_/g, '-'),
+        metersUsed: parseFloat(metersMatch[1]),
+      }],
     }
+  }
 
+  // Explicit OB query: "OB التالي" or "آخر OB" or "رقم OB الجديد"
+  if (/(OB\s*(التالي|الجديد|القادم)|آخر\s*OB|ايه\s*OB|كم\s*OB|رقم\s*OB)/i.test(msg)) {
     return {
       isProtectionCommand: true,
       action: 'next_ob',
     }
   }
 
-  // Query for OB info
-  if (/(كم\s*OB|آخر\s*OB|ايه\s*OB|شنو\s*OB|OB\s*التالي|OB\s*الجديد|ايه\s*رقم|رقم\s*العملية|رقم\s*أمر\s*الشغل)/i.test(msg)) {
-    return {
-      isProtectionCommand: true,
-      action: 'next_ob',
-    }
-  }
-
-  // Search for roll by partial code
-  // e.g. "دور على رول HXS" or "بحث عن 3M"
-  if (/(دور|بحث|لقى|find|search|فين|في\s*ايه).*(رول|كود)\s*([A-Z0-9-]{2,15})/i.test(msg)) {
+  // Explicit roll search: "دور على رول HXS" or "بحث عن رول 3M"
+  if (/(دور|بحث|لقى|find|search|فين).*(رول|كود)\s*([A-Z0-9-]{2,15})/i.test(msg)) {
     const codeMatch = msg.match(/(?:رول|كود)\s*([A-Z0-9-]{2,15})/i)
     if (codeMatch) {
       return {
@@ -396,6 +386,8 @@ function parseProtectionCommand(message: string): ParsedProtectionCommand {
     }
   }
 
+  // EVERYTHING ELSE (queries like "كم رصيد رول", greetings, explanations,
+  // reports, etc.) → let the AI handle it with the full data snapshot.
   return defaultRes
 }
 
