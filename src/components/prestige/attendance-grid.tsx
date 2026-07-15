@@ -178,7 +178,7 @@ export function AttendanceGrid({ open, onOpenChange, employees, preselectedEmp, 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-[#0A0A0A] border-white/10 text-white max-w-7xl w-[95vw] max-h-[95vh] overflow-hidden flex flex-col" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <DialogContent className="bg-[#0A0A0A] border-white/10 text-white max-w-7xl w-[95vw] max-h-[90dvh] overflow-hidden flex flex-col" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <Calendar size={20} className="text-[#DC143C]" />
@@ -188,7 +188,7 @@ export function AttendanceGrid({ open, onOpenChange, employees, preselectedEmp, 
         </DialogHeader>
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-3 p-3 bg-black/30 rounded-lg border border-white/5">
+        <div className="flex flex-wrap gap-3 p-3 bg-black/30 rounded-lg border border-white/5 shrink-0">
           {STATUS_OPTIONS.map(s => (
             <div key={s.value} className="flex items-center gap-2">
               <div
@@ -211,7 +211,7 @@ export function AttendanceGrid({ open, onOpenChange, employees, preselectedEmp, 
         </div>
 
         {/* Grid */}
-        <div className="flex-1 overflow-auto border border-white/5 rounded-lg">
+        <div className="flex-1 overflow-auto overscroll-contain border border-white/5 rounded-lg">
           {loading ? (
             <div className="text-center py-12 text-gray-400">{t('loading')}</div>
           ) : (
@@ -298,7 +298,7 @@ export function AttendanceGrid({ open, onOpenChange, employees, preselectedEmp, 
         </div>
 
         {/* Footer with totals + save */}
-        <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5">
+        <div className="flex items-center justify-between gap-3 pt-3 border-t border-white/5 shrink-0">
           <div className="text-xs text-gray-400">
             {lang === 'ar' ? 'الخلاصة:' : 'Summary:'}{' '}
             <span className="text-[#00C853]">{activeEmployees.length} {lang === 'ar' ? 'موظف' : 'employees'}</span>

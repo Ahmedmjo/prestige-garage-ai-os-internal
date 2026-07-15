@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import {
   Shield, Package, TrendingDown, AlertTriangle, CheckCircle2, XCircle,
-  Search, Plus, History, Film, DollarSign, Activity,
+  Search, Plus, History, Film, DollarSign, Activity, Copy,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -78,6 +78,11 @@ export function ProtectionModule() {
   const [showConsumptionDialog, setShowConsumptionDialog] = useState(false)
   const [selectedRoll, setSelectedRoll] = useState<Roll | null>(null)
   const [showOBList, setShowOBList] = useState(false)
+  // يخزّن آخر عملية سحب تم تسجيلها لاستخدامها عند "التكرار" —
+  // يدعم تسجيل أكثر من رول لنفس OB على نفس السيارة.
+  const [duplicateContext, setDuplicateContext] = useState<null | {
+    clientName: string; carType: string; plateNumber: string; workOrder: string
+  }>(null)
 
   useEffect(() => {
     loadData()
@@ -289,13 +294,25 @@ export function ProtectionModule() {
             <p className="text-xl font-bold text-white font-mono">{nextOB}</p>
           </div>
         </div>
-        <Button
-          onClick={() => setShowConsumptionDialog(true)}
-          className="bg-[#00C853] hover:bg-[#00C853]/80 text-white border-0"
-        >
-          <Plus size={16} className="ml-1" />
-          تسجيل بـ {nextOB}
-        </Button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <Button
+            onClick={() => setShowConsumptionDialog(true)}
+            className="bg-[#00C853] hover:bg-[#00C853]/80 text-white border-0"
+          >
+            <Plus size={16} className="ml-1" />
+            تسجيل بـ {nextOB}
+          </Button>
+          {duplicateContext && (
+            <Button
+              onClick={() => setShowConsumptionDialog(true)}
+              className="bg-[#03DAC6]/15 text-[#03DAC6] border border-[#03DAC6]/30 hover:bg-[#03DAC6]/25"
+              title={`تكرار سحب على نفس السيارة/OB: ${duplicateContext.workOrder}`}
+            >
+              <Copy size={16} className="ml-1" />
+              تكرار
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -465,6 +482,8 @@ export function ProtectionModule() {
         rolls={rolls}
         preselectedRoll={selectedRoll}
         defaultOB={nextOB}
+        duplicateContext={duplicateContext}
+        onConsumptionSaved={(ctx) => setDuplicateContext(ctx)}
         onSuccess={loadData}
       />
       <OBListDialog
@@ -590,12 +609,14 @@ function AddRollDialog({ open, onOpenChange, onSuccess }: {
 }
 
 // ─── Consumption Dialog ──────────────────────────────
-function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, defaultOB, onSuccess }: {
+function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, defaultOB, duplicateContext, onConsumptionSaved, onSuccess }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   rolls: Roll[]
   preselectedRoll: Roll | null
   defaultOB: string
+  duplicateContext: null | { clientName: string; carType: string; plateNumber: string; workOrder: string }
+  onConsumptionSaved: (ctx: { clientName: string; carType: string; plateNumber: string; workOrder: string }) => void
   onSuccess: () => void
 }) {
   const { t, lang } = useI18n()
@@ -609,10 +630,21 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
   useEffect(() => {
     if (preselectedRoll) {
       setForm(f => ({ ...f, rollCode: preselectedRoll.code, workOrder: defaultOB }))
+    } else if (duplicateContext) {
+      // "تكرار": نحافظ على نفس العميل/السيارة/OB، ونفرّغ فقط حقول الرول
+      setForm(f => ({
+        ...f,
+        rollCode: '',
+        metersUsed: '', waste: '', usageArea: '',
+        clientName: duplicateContext.clientName,
+        carType: duplicateContext.carType,
+        plateNumber: duplicateContext.plateNumber,
+        workOrder: duplicateContext.workOrder,
+      }))
     } else {
       setForm(f => ({ ...f, workOrder: defaultOB }))
     }
-  }, [preselectedRoll, defaultOB])
+  }, [preselectedRoll, defaultOB, duplicateContext, open])
 
   async function handleSubmit() {
     if (!form.rollCode || !form.metersUsed) {
@@ -632,6 +664,15 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
       }
       const result = await res.json()
       toast.success(`تم تسجيل استهلاك ${form.metersUsed}م من ${form.rollCode} بأمر الشغل ${form.workOrder}. المتبقي: ${result.newRemaining.toFixed(2)}م`)
+      // نخزّن سياق هذه العملية لاستخدامه عند "التكرار" — يتيح إضافة رول آخر لنفس OB/السيارة
+      if (form.clientName || form.carType || form.plateNumber) {
+        onConsumptionSaved({
+          clientName: form.clientName,
+          carType: form.carType,
+          plateNumber: form.plateNumber,
+          workOrder: form.workOrder,
+        })
+      }
       setForm({
         rollCode: '', date: new Date().toISOString().split('T')[0],
         clientName: '', carType: '', plateNumber: '',

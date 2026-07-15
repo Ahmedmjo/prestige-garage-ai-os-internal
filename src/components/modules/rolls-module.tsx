@@ -458,7 +458,7 @@ export function RollsModule() {
       )}
 
       {/* Add Roll Dialog */}
-      <AddRollDialog open={showAddDialog} onOpenChange={setShowAddDialog} onSuccess={loadRolls} />
+      <AddRollDialog open={showAddDialog} onOpenChange={setShowAddDialog} onSuccess={loadRolls} existingRolls={rolls} />
 
       {/* Edit Roll Dialog */}
       {editRoll && (
@@ -567,10 +567,11 @@ export function RollsModule() {
 }
 
 // ─── Add Roll Dialog ─────────────────────────────────
-function AddRollDialog({ open, onOpenChange, onSuccess }: {
+function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   onSuccess: () => void
+  existingRolls: Roll[]
 }) {
   const { t, lang } = useI18n()
   const [form, setForm] = useState({
@@ -608,10 +609,24 @@ function AddRollDialog({ open, onOpenChange, onSuccess }: {
     }
   }
 
-  // Auto-suggest code based on brand + type
-  const suggestedCode = form.brand && form.type
-    ? `${form.brand.slice(0, 3).toUpperCase()}-${form.type.slice(0, 3).toUpperCase()}-${String(Math.floor(Math.random() * 900) + 100)}`
-    : ''
+  // ─── Live roll-code suggestion (real next sequence — no randomness) ───
+  // Computes the next sequence for the brand+type prefix from existing rolls.
+  // Auto-fills the code field (editable — user can change the sequence number).
+  // Triggered from brand/type/category onChange (not useEffect) to avoid cascading renders.
+  function computeSuggestedCode(brand: string, type: string): string {
+    const bp = brand.slice(0, 3).toUpperCase()
+    const tp = type.slice(0, 3).toUpperCase()
+    if (!bp || !tp) return ''
+    const re = new RegExp(`^${bp}-${tp}-(\\d+)$`, 'i')
+    let max = 0
+    for (const r of existingRolls) {
+      const m = (r.code || '').match(re)
+      if (m) { const n = parseInt(m[1], 10); if (n > max) max = n }
+    }
+    return `${bp}-${tp}-${String(max + 1).padStart(3, '0')}`
+  }
+
+  const suggestedCode = computeSuggestedCode(form.brand, form.type)
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -645,7 +660,16 @@ function AddRollDialog({ open, onOpenChange, onSuccess }: {
             <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'الفئة' : 'Category'}</Label>
             <select
               value={form.rollCategory}
-              onChange={e => setForm({ ...form, rollCategory: e.target.value })}
+              onChange={e => {
+                const cat = e.target.value
+                setForm(prev => {
+                  // Auto-suggest "THF" type prefix for thermal-insulation rolls (العزل الحراري).
+                  // THF = Thermal Heat Film. Only prefills when type is empty (user can override).
+                  const newType = (cat === 'thermal_long' || cat === 'thermal_short') && !prev.type ? 'THF' : prev.type
+                  const nextCode = computeSuggestedCode(prev.brand, newType)
+                  return { ...prev, rollCategory: cat, type: newType, code: nextCode || prev.code }
+                })
+              }}
               className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-1"
             >
               <option value="ppf">{lang === 'ar' ? 'بروتيكشن PPF' : 'PPF Protection'}</option>
@@ -653,8 +677,8 @@ function AddRollDialog({ open, onOpenChange, onSuccess }: {
               <option value="thermal_short">{lang === 'ar' ? 'عزل قصير' : 'Thermal Short'}</option>
             </select>
           </div>
-          <Field label={`${lang === 'ar' ? 'الماركة' : 'Brand'} *`} value={form.brand} onChange={v => setForm({ ...form, brand: v })} placeholder="Hexis" />
-          <Field label={`${lang === 'ar' ? 'النوع' : 'Type'} *`} value={form.type} onChange={v => setForm({ ...form, type: v })} placeholder="Body Fence" />
+          <Field label={`${lang === 'ar' ? 'الماركة' : 'Brand'} *`} value={form.brand} onChange={v => setForm(prev => ({ ...prev, brand: v, code: computeSuggestedCode(v, prev.type) || prev.code }))} placeholder="Hexis" />
+          <Field label={`${lang === 'ar' ? 'النوع' : 'Type'} *`} value={form.type} onChange={v => setForm(prev => ({ ...prev, type: v, code: computeSuggestedCode(prev.brand, v) || prev.code }))} placeholder="Body Fence" />
           <Field label={lang === 'ar' ? 'الموديل' : 'Model'} value={form.model} onChange={v => setForm({ ...form, model: v })} placeholder="Glossy" />
           <Field label={`${lang === 'ar' ? 'العرض (م)' : 'Width (m)'}`} value={form.width} onChange={v => setForm({ ...form, width: v })} placeholder="1.52" type="number" />
           <Field label={`${lang === 'ar' ? 'الطول الإجمالي (م)' : 'Total Length (m)'} *`} value={form.totalLength} onChange={v => setForm({ ...form, totalLength: v })} placeholder="15" type="number" />
