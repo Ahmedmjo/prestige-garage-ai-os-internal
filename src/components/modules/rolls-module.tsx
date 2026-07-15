@@ -628,6 +628,21 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
 
   const suggestedCode = computeSuggestedCode(form.brand, form.type)
 
+  // ─── Helper codes: existing rolls matching the current brand+type prefix ───
+  // Shows up to 5 existing codes with the same pattern as a reference,
+  // so the user can see the naming convention and pick the right sequence.
+  const matchingCodes = (form.brand && form.type)
+    ? existingRolls
+        .filter(r => {
+          const bp = form.brand.slice(0, 3).toUpperCase()
+          const tp = form.type.slice(0, 3).toUpperCase()
+          return (r.code || '').toUpperCase().startsWith(`${bp}-${tp}-`)
+        })
+        .sort((a, b) => (b.code || '').localeCompare(a.code || ''))
+        .slice(0, 5)
+        .map(r => r.code)
+    : []
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#0A0A0A] border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto" dir={lang === 'ar' ? 'rtl' : 'ltr'}>
@@ -654,6 +669,20 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
                 {lang === 'ar' ? `استخدم: ${suggestedCode}` : `Use: ${suggestedCode}`}
               </button>
             )}
+            {matchingCodes.length > 0 && (
+              <div className="mt-2 p-2 bg-[#0A0A0A] border border-white/5 rounded">
+                <p className="text-[10px] text-gray-500 mb-1">
+                  {lang === 'ar' ? 'أكواد موجودة بنفس النمط:' : 'Existing codes with same pattern:'}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {matchingCodes.map(c => (
+                    <span key={c} className="text-[10px] font-mono text-[#03DAC6] bg-[#03DAC6]/10 px-1.5 py-0.5 rounded cursor-pointer hover:bg-[#03DAC6]/20" onClick={() => setForm(prev => ({ ...prev, code: c }))}>
+                      {c}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           {/* Category selector */}
           <div>
@@ -663,9 +692,11 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
               onChange={e => {
                 const cat = e.target.value
                 setForm(prev => {
-                  // Auto-suggest "THF" type prefix for thermal-insulation rolls (العزل الحراري).
-                  // THF = Thermal Heat Film. Only prefills when type is empty (user can override).
-                  const newType = (cat === 'thermal_long' || cat === 'thermal_short') && !prev.type ? 'THF' : prev.type
+                  // Auto-suggest "THM" type prefix for thermal-insulation rolls (العزل الحراري).
+                  // THM = Thermal (distinctive — NOT THF, because THF is used by the
+                  // thermal-insulation SERVICE code in the services section).
+                  // Only prefills when type is empty (user can override).
+                  const newType = (cat === 'thermal_long' || cat === 'thermal_short') && !prev.type ? 'THM' : prev.type
                   const nextCode = computeSuggestedCode(prev.brand, newType)
                   return { ...prev, rollCategory: cat, type: newType, code: nextCode || prev.code }
                 })
