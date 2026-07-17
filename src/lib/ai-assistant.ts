@@ -931,7 +931,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       data: { userMessage, aiResponse: reply, intentType: detectIntent(userMessage) },
     })
 
-    return { reply, intent: detectIntent(userMessage), provider: providerUsed }
+    return { reply, intent: detectIntent(userMessage), provider: providerUsed, errors }
   } catch (e: any) {
     console.error('AI Assistant error:', e)
     return { reply: `عذراً، حدث خطأ. ${e.message || ''}`, intent: 'error', provider: 'none' }
