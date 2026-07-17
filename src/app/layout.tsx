@@ -60,6 +60,11 @@ export default function RootLayout({
       <body className="antialiased bg-background text-foreground">
         <I18nProvider>{children}</I18nProvider>
         <Toaster />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: "if ('serviceWorker' in navigator) { window.addEventListener('load', function() { navigator.serviceWorker.register('/sw.js').catch(function() {}); }); }",
+          }}
+        />
       </body>
     </html>
   );
