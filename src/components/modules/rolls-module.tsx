@@ -938,8 +938,8 @@ function EditConsumptionDialog({ consumption, rolls, open, onOpenChange, onSucce
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit() {
-    if (!form.rollCode || !form.metersUsed) {
-      toast.error('كود الرول والأمتار المستهلكة مطلوبة')
+    if (!form.rollCode || (!form.metersUsed && !form.waste)) {
+      toast.error('كود الرول مطلوب — ضع الأمتار أو الهالك')
       return
     }
     setSaving(true)
@@ -1150,8 +1150,8 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, onSucce
   }, [preselectedRoll])
 
   async function handleSubmit() {
-    if (!form.rollCode || !form.metersUsed) {
-      toast.error('كود الرول والأمتار المستهلكة مطلوبة')
+    if (!form.rollCode || (!form.metersUsed && !form.waste)) {
+      toast.error('كود الرول مطلوب — ضع الأمتار أو الهالك')
       return
     }
     setSaving(true)

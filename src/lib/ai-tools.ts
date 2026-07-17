@@ -213,7 +213,7 @@ export const AI_TOOLS = [
           notes: { type: 'string', description: 'ملاحظات (اختياري)' },
           transactionType: { type: 'string', description: 'نوع الحركة (اختياري، افتراضياً "استهلاك")' },
         },
-        required: ['rollCode', 'metersUsed'],
+        required: ['rollCode'],
       },
     },
   },

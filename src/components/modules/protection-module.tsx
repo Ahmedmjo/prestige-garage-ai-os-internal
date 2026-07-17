@@ -647,8 +647,8 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
   }, [preselectedRoll, defaultOB, duplicateContext, open])
 
   async function handleSubmit() {
-    if (!form.rollCode || !form.metersUsed) {
-      toast.error('كود الرول والأمتار المستهلكة مطلوبة')
+    if (!form.rollCode || (!form.metersUsed && !form.waste)) {
+      toast.error('كود الرول مطلوب — ضع الأمتار المستخدمة أو الهالك')
       return
     }
     setSaving(true)
