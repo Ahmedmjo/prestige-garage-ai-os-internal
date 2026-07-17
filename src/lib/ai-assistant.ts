@@ -176,16 +176,16 @@ async function buildDataSnapshot() {
       currentMonthNum: currentMonth,
       currentYear,
     },
-    payroll,
-    employees: employees.map(e => ({
-      name: e.name,
-      jobTitle: e.jobTitle,
-      baseSalary: e.baseSalary,
-      status: e.status,
-      phone: e.phone,
-      serviceType: (e as any).serviceType,
-      dashboardCategory: (e as any).dashboardCategory,
+    // Compact payroll — names + net salary only (no detailed arrays)
+    payroll: payroll.map(p => ({
+      name: p.name, jobTitle: p.jobTitle, status: p.status,
+      fixedSalary: p.fixedSalary, netSalary: p.netSalary,
+      commissions: p.commissions.total, advances: p.advances.total, penalties: p.penalties.total,
+      attendance: p.attendance,
     })),
+    // Compact employees — names + role only
+    employees: employees.map(e => ({ name: e.name, jobTitle: e.jobTitle, status: e.status })),
+    // Compact rolls — code + remaining + status only (not full details)
     rolls: {
       summary: {
         total: rolls.length,
@@ -198,48 +198,35 @@ async function buildDataSnapshot() {
           return s + ((r.price || 0) * (remaining / total))
         }, 0),
       },
-      byCategory: rollsByCategory,
+      // Only list code + remaining length so AI can answer "رصيد رول XXX"
       items: rolls.map(r => ({
-        code: r.code,
-        brand: r.brand,
-        type: r.type,
-        model: r.model,
-        category: r.rollCategory,
-        totalLength: r.totalLength,
-        remainingLength: r.remainingLength,
-        price: r.price,
-        supplier: r.supplier,
-        status: r.status,
-        carsCount: r.carsCount,
-        purchaseDate: r.purchaseDate,
+        code: r.code, brand: r.brand, type: r.type,
+        category: r.rollCategory, remainingLength: r.remainingLength,
+        totalLength: r.totalLength, status: r.status, price: r.price,
       })),
     },
     protection: {
       nextOB,
-      recentOBs: obList.slice(0, 10),
+      recentOBs: obList.slice(0, 5).map((o: any) => ({
+        workOrder: o.workOrder, clientName: o.clientName, carType: o.carType,
+        totalMeters: o.totalMeters, rollsCount: o.rollsCount, date: o.date,
+      })),
       totalConsumptions: consumptions.length,
-      totalMetersUsed: consumptions.reduce((s, c) => s + (c.metersUsed || 0), 0),
     },
+    // Compact services — category totals + last 10 only (not 200 items)
     services: {
       total: services.length,
       totalRevenue: services.reduce((s, x) => s + x.price, 0),
       byCategory: Object.entries(servicesByCategory).map(([key, v]) => ({
-        key,
-        count: v.count,
-        total: v.total,
+        key, count: v.count, total: v.total,
         average: v.count > 0 ? Math.round(v.total / v.count) : 0,
-        sampleItems: v.items.slice(0, 5),
       })),
-      recentItems: services.slice(0, 20).map(s => ({
-        code: s.code,
-        date: s.date,
-        client: s.clientName,
-        car: s.carType,
-        service: s.serviceType,
-        price: s.price,
-        technician: s.technician,
+      recent: services.slice(0, 10).map(s => ({
+        code: s.code, date: s.date, client: s.clientName, car: s.carType,
+        service: s.serviceType, price: s.price, technician: s.technician,
       })),
     },
+    // Compact stock — summary + low/out items only
     stock: {
       summary: {
         totalItems: stockItems.length,
@@ -247,49 +234,25 @@ async function buildDataSnapshot() {
         lowStock: stockItems.filter(s => s.status === 'منخفض').length,
         outOfStock: stockItems.filter(s => s.status === 'نفد').length,
       },
-      byCategory: Object.entries(stockByCategory).map(([cat, items]) => ({
-        category: cat,
-        count: items.length,
-        items: items.map(i => ({
-          name: i.name,
-          unit: i.unit,
-          currentQty: i.currentQty,
-          minLevel: i.minLevel,
-          status: i.status,
-          unitPrice: i.unitPrice,
-        })),
+      lowItems: stockItems.filter(s => s.status !== 'كافي').map(i => ({
+        name: i.name, unit: i.unit, currentQty: i.currentQty, status: i.status,
       })),
     },
+    // Compact invoices — totals + last 5 only
     invoices: {
       total: invoices.length,
       totalNet: invoices.reduce((s, i) => s + i.net, 0),
-      items: invoices.map(i => ({
-        deliveryNote: i.deliveryNote,
-        date: i.date,
-        description: i.description,
-        total: i.total,
-        discount: i.discount,
-        net: i.net,
-        itemsCount: i.itemsCount,
+      recent: invoices.slice(0, 5).map(i => ({
+        deliveryNote: i.deliveryNote, date: i.date, net: i.net,
       })),
     },
-    alerts: alerts.map(a => ({
-      type: a.type,
-      severity: a.severity,
-      title: a.title,
-      message: a.message,
-    })),
+    alerts: alerts.slice(0, 10).map(a => ({ type: a.type, title: a.title, message: a.message })),
+    // Compact consumptions — last 10 only (not 100)
     consumptions: {
       total: consumptions.length,
-      recent: consumptions.slice(0, 20).map(c => ({
-        date: c.date,
-        rollCode: c.rollCode,
-        client: c.clientName,
-        car: c.carType,
-        metersUsed: c.metersUsed,
-        waste: c.waste,
-        workOrder: c.workOrder,
-        usageArea: c.usageArea,
+      recent: consumptions.slice(0, 10).map(c => ({
+        date: c.date, rollCode: c.rollCode, client: c.clientName,
+        car: c.carType, metersUsed: c.metersUsed, workOrder: c.workOrder,
       })),
     },
   }
@@ -887,7 +850,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
     // Try 2: Groq (Llama 3.3 70B) — fast fallback
     if (!reply && PROVIDERS.groq.enabled) {
       try {
-        reply = await callOpenAICompatible(PROVIDERS.groq.url, PROVIDERS.groq.apiKey, PROVIDERS.groq.model, messages, 0.2, 1200)
+        reply = await callOpenAICompatible(PROVIDERS.groq.url, PROVIDERS.groq.apiKey, PROVIDERS.groq.model, messages, 0.2, 600)
         providerUsed = 'groq-llama-3.3-70b'
       } catch (e: any) { errors.push(`Groq: ${e.message}`) }
     }
@@ -911,7 +874,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
     // Try 4: z-ai-web-dev-sdk (GLM) — always available
     if (!reply) {
       try {
-        reply = await callZAI(messages, 0.2, 1200)
+        reply = await callZAI(messages, 0.2, 600)
         providerUsed = 'z-ai-glm'
       } catch (e: any) { errors.push(`Z-AI: ${e.message}`) }
     }
