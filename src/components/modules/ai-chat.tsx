@@ -10,12 +10,19 @@ import { toast } from 'sonner'
 import { PrestigeLogo } from '@/components/prestige/logo'
 import { useI18n } from '@/lib/i18n-context'
 
+interface PendingAction {
+  tool: string
+  args: Record<string, any>
+}
+
 interface Message {
   role: 'user' | 'assistant'
   content: string
   timestamp: string
   intent?: string
   provider?: string
+  pendingAction?: PendingAction | null
+  actionResolved?: boolean
 }
 
 interface Conversation {
@@ -157,11 +164,60 @@ export function AIChat({ onClose }: AIChatProps) {
         role: 'assistant', content: data.reply,
         timestamp: data.timestamp || new Date().toISOString(),
         intent: data.intent, provider: data.provider,
+        pendingAction: data.pendingAction || null,
       }
       setConversations(prev => prev.map(c => c.id === currentId ? { ...c, messages: [...c.messages, aiMsg], updatedAt: new Date().toISOString() } : c))
     } catch (e: any) {
       toast.error(e.message)
     } finally { setLoading(false) }
+  }
+
+  // Marks the message holding a pendingAction as resolved (buttons disappear)
+  function resolveAction(msgTimestamp: string) {
+    setConversations(prev => prev.map(c => c.id === activeId
+      ? { ...c, messages: c.messages.map(m => m.timestamp === msgTimestamp ? { ...m, actionResolved: true } : m) }
+      : c))
+  }
+
+  function appendAssistantMessage(text: string) {
+    const msg: Message = { role: 'assistant', content: text, timestamp: new Date().toISOString() }
+    setConversations(prev => prev.map(c => c.id === activeId ? { ...c, messages: [...c.messages, msg], updatedAt: new Date().toISOString() } : c))
+  }
+
+  async function confirmPendingAction(action: PendingAction, msgTimestamp: string) {
+    resolveAction(msgTimestamp)
+    setLoading(true)
+    try {
+      const res = await fetch('/api/ai/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tool: action.tool, args: action.args }),
+      })
+      const data = await res.json()
+      appendAssistantMessage(data.reply || (data.success ? 'تم بنجاح ✅' : 'حدث خطأ ❌'))
+      if (data.success) toast.success('تم التنفيذ بنجاح')
+      else toast.error(data.reply || 'فشل التنفيذ')
+    } catch (e: any) {
+      appendAssistantMessage('❌ تعذر الاتصال بالخادم لتنفيذ العملية.')
+      toast.error(e.message)
+    } finally { setLoading(false) }
+  }
+
+  function cancelPendingAction(msgTimestamp: string) {
+    resolveAction(msgTimestamp)
+    appendAssistantMessage('تم الإلغاء — لم يتم تسجيل أي بيانات. ❎')
+  }
+
+  async function duplicatePendingAction(action: PendingAction, msgTimestamp: string) {
+    await confirmPendingAction(action, msgTimestamp)
+    const args = action.args || {}
+    const ctx: string[] = []
+    if (args.clientName) ctx.push(`العميل: ${args.clientName}`)
+    if (args.carType) ctx.push(`السيارة: ${args.carType}`)
+    if (args.plateNumber) ctx.push(`اللوحة: ${args.plateNumber}`)
+    if (args.workOrder) ctx.push(`OB: ${args.workOrder}`)
+    const ctxStr = ctx.length ? ` (${ctx.join(' • ')})` : ''
+    appendAssistantMessage(`✅ تم تسجيل السحب الأول. لنكمل بنفس السيارة/OB${ctxStr}. اكتب الرول التالي والكمية.`)
   }
 
   return (
@@ -230,6 +286,37 @@ export function AIChat({ onClose }: AIChatProps) {
                   <div className={`flex-1 min-w-0 max-w-[80%] ${msg.role === 'user' ? 'text-left' : ''}`}>
                     <div className={`rounded-2xl p-3.5 ${msg.role === 'user' ? 'bg-[#DC143C]/15 border border-[#DC143C]/20 text-white rounded-tr-sm' : 'bg-[#0A0A0A] border border-white/5 text-gray-100 rounded-tl-sm'}`}>
                       <div className="text-sm leading-relaxed whitespace-pre-wrap">{formatMessage(msg.content)}</div>
+                      {msg.pendingAction && !msg.actionResolved && (
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/10 flex-wrap">
+                          <Button
+                            size="sm"
+                            disabled={loading}
+                            onClick={() => confirmPendingAction(msg.pendingAction!, msg.timestamp)}
+                            className="bg-[#00C853]/15 text-[#00C853] border border-[#00C853]/30 hover:bg-[#00C853]/25 h-8 px-3 text-xs"
+                          >
+                            ✅ تأكيد التسجيل
+                          </Button>
+                          {msg.pendingAction.tool === 'roll_consumption' && (
+                            <Button
+                              size="sm"
+                              disabled={loading}
+                              onClick={() => duplicatePendingAction(msg.pendingAction!, msg.timestamp)}
+                              className="bg-[#03DAC6]/10 text-[#03DAC6] border border-[#03DAC6]/30 hover:bg-[#03DAC6]/20 h-8 px-3 text-xs"
+                            >
+                              🔁 تكرار
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            disabled={loading}
+                            onClick={() => cancelPendingAction(msg.timestamp)}
+                            className="text-gray-400 hover:text-[#DC143C] h-8 px-3 text-xs"
+                          >
+                            ❎ إلغاء
+                          </Button>
+                        </div>
+                      )}
                       <div className="flex items-center gap-1 mt-2 flex-wrap">
                         {msg.intent && msg.intent !== 'query' && (
                           <Badge className="bg-white/5 text-gray-400 border-white/10 text-xs">{msg.intent === 'add' ? '📝' : msg.intent === 'report' ? '📊' : msg.intent === 'alert' ? '🔔' : msg.intent === 'suggestion' ? '💡' : ''} {msg.intent}</Badge>

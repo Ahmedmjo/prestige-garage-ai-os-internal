@@ -16,6 +16,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       reply: result.reply,
       intent: result.intent,
+      provider: result.provider || '',
+      pendingAction: (result as any).pendingAction || null,
       timestamp: new Date().toISOString(),
     })
   } catch (e: any) {

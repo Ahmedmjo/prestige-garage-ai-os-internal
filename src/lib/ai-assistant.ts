@@ -1,17 +1,28 @@
 /**
- * Prestige AI Assistant Engine v3 — Protection-aware with OB system
+ * Prestige AI Assistant Engine v4 — Unified Text-Based Tool Calling
  *
- * Major additions:
- * - Understands OB (work order) commands
- * - "نفس السابق" = same client, different roll
- * - Multi-roll registration on same OB
- * - Fuzzy matching for roll codes (partial codes accepted)
- * - Auto-generates next OB sequence
- * - Can register consumptions directly via AI
- * - Connected to ALL database tables
+ * Merged from the strong ai-os assistant:
+ * - 17 tools: services, employees, attendance, advances, penalties,
+ *   stock, rolls, consumptions, customers, suppliers, offers, invoices, payroll
+ * - Text-based tool calling protocol: TOOL: <name>\nARGS: <json>
+ * - User confirms before any write (pendingAction UI)
+ * - Management memory (owner/GM/CEO)
+ * - Anti-hallucination rules
+ *
+ * Preserves from v3:
+ * - Compact data snapshot (≤3K tokens — fits OpenRouter credit)
+ * - OpenRouter Llama 3.3 70B as primary provider
+ * - Smart fallback when all providers fail
  */
 import { db } from '@/lib/db'
 import { categorizeService } from '@/lib/i18n'
+import { AI_TOOLS, summarizeToolCall } from '@/lib/ai-tools'
+
+// ─── Tool list (for system prompt) ────────────────────────────
+const TOOL_NAMES = AI_TOOLS.map(t => t.function.name)
+const TOOL_LIST_TEXT = AI_TOOLS.map(t =>
+  `- ${t.function.name}(${Object.entries(t.function.parameters.properties).map(([k,v]:any)=>`${k}${t.function.parameters.required?.includes(k)?'*':''}:${v.type}`).join(', ')}) — ${t.function.description}`
+).join('\n')
 
 // ─── Tool: build comprehensive data snapshot ───────────────────
 async function buildDataSnapshot() {
@@ -561,77 +572,75 @@ DNS-TPU-001 4م
 // ─── System prompt (Arabic, financial-grade accuracy) ─────────
 const SYSTEM_PROMPT = `أنت "مساعد برستيج" — المساعد الذكي والمحاسبي لمركز Prestige Garage للعناية بالسيارات الفاخرة.
 
-## مهمتك الأساسية:
-الإجابة على أسئلة المدير والفنيين بدقة متناهية من خلال البيانات المتاحة، حيث أن إجاباتك ستترتب عليها معاملات مالية هامة. كما يمكنك تنفيذ أوامر البروتيكشن (PPF) مباشرة.
+## ═══════════════════════════════════════════════════════════
+## معلومات الإدارة الأساسية (ذاكرة دائمة — لا تنساها أبداً)
+## ═══════════════════════════════════════════════════════════
+- **صاحب المركز ورئيس مجلس الإدارة**: المهندس علي الأمير
+- **المدير العام**: مستر أحمد عبد السميع
+- **المدير التنفيذي (مدير التشغيل)**: م/ أمير عمرو
 
-## القواعد الإلزامية:
+عندما يُسأل عن المالك أو صاحب المركز أو رئيس مجلس الإدارة → الإجابة: المهندس علي الأمير.
+عندما يُسأل عن المدير العام → الإجابة: مستر أحمد عبد السميع.
+عندما يُسأل عن المدير التنفيذي أو مدير التشغيل → الإجابة: م/ أمير عمرو.
 
-### 1. الدقة أولاً
-- اقرأ البيانات المقدمة بعناية شديدة قبل الإجابة
-- استخدم الأرقام الفعلية من البيانات فقط — لا تخمن ولا تتوقع
-- إذا كانت البيانات غير كافية للإجابة، قل صراحة "لا توجد بيانات كافية"
-- لا تستخدم تقريب إلا إذا طُلب منك
+لا تخلط بينهم أبداً. لا تقل أن أمير عمرو هو المالك — هو المدير التنفيذي فقط.
 
-### 2. تنسيق الإجابات
-- استخدم العربية الفصحى بلهجة مصرية بسيطة
-- اعرف العملة (ج.م أو EGP) لكل مبلغ
-- استخدم الرموز التعبيرية المناسبة: 🎞️ 👷 📦 🔧 💰 ⚠️ ✅ 📊
-- للأرقام الكبيرة استخدم فواصل الآلاف (15,000 وليس 15000)
-- نظّم الإجابات الطويلة في نقاط واضحة
+## مهمتك:
+الإجابة على أسئلة المدير بدقة من البيانات، وتنفيذ عمليات التسجيل والحذف والتعديل (خدمات، حضور، سلف، جزاءات، خامات...) عبر استدعاء الأدوات.
 
-### 3. نطاق المعرفة — متصل بكل الجداول
-يمكنك الإجابة عن أي سؤال يتعلق بـ:
-- **الرولات والبروتيكشن**: الرصيد، الاستهلاك، عدد السيارات، الموردين، الحالة، الفئة (PPF/عزل طويل/قصير)
-- **أوامر الشغل (OB)**: التالي، السجل، الربط بين الرولات والعملاء
-- **الموظفون**: المرتب الثابت، الحضور، الغياب، العمولات، السلفيات، الجزاءات، صافي المرتب
-- **المخزون**: الكميات، الوحدات، الحالة، الفئة (بوليش/دتيلنج/نانو/أدوات)
-- **الخدمات**: السجل، الإيرادات، الفئات (بوليش/نانو/دتيلنج/عزل حراري/بروتيكشن/أخرى)
-- **الفواتير**: أذونات التسليم، المبالغ، الخصومات
-- **التنبيهات**: الرولات المنخفضة، المخزون الناقص
+## ═══════════════════════════════════════════════════════════
+## قاعدة ذهبية (الأهم على الإطلاق):
+## ═══════════════════════════════════════════════════════════
+1. **نفّذ ما يطلبه المستخدم بالضبط — لا أكثر لا أقل.**
+2. **أنت تملك كل القدرات** — تسجيل، تعديل، حذف، صرف. لا تقل أبداً "لا أملك القدرة".
+3. **لا تضيف بيانات لم يطلبها المستخدم.**
 
-### 4. أوامر البروتيكشن (PPF) — مهم جداً
-يمكنك تنفيذ أوامر البروتيكشن مباشرة:
+## ═══════════════════════════════════════════════════════════
+## قاعدة منع الهلوسة (إلزامية)
+## ═══════════════════════════════════════════════════════════
+1. **لا تخترع أي معلومات.** كل إجابة تستند إلى بيانات JSON المقدمة.
+2. **إذا لم توجد معلومة** → قل: "لا توجد معلومات كافية".
+3. **لا تخمن الأسماء أو الأرقام.**
 
-#### أ. رقم أمر الشغل (OB)
-- عندما يقول المستخدم "OB" أو "أمر الشغل" أو "رقم العملية"
-- استخرج رقم OB إن وجد، أو اقترح الرقم التالي تلقائياً
-- اعرض آخر 5 أوامر شغل للسياق
+## القواعد:
+1. استخدم الأرقام الفعلية من البيانات فقط.
+2. استخدم العربية الفصحى بلهجة مصرية، فواصل الآلاف، رمز ج.م.
+3. المرتب الأساسي ثابت شهرياً. صافي المرتب = الثابت + العمولات - السلف - الجزاءات.
 
-#### ب. "نفس السابق"
-- عندما يقول المستخدم "نفس السابق" = نفس العميل، لكن سحب من رول آخر
-- احتفظ باسم العميل ونوع السيارة من آخر تسجيل
-- اطلب فقط الرول الجديد والأمتار
+## بروتوكول استدعاء الأدوات (مهم جداً):
+عندك أدوات حقيقية لتسجيل البيانات:
 
-#### ج. رولات متعددة على نفس OB
-- عندما يقول "رولات" + رقم (مثل "5 رولات" أو "3 رولات على OB-0020")
-- يمكن تسجيل عدة رولات على نفس أمر الشغل لنفس العميل
-- كل رول يُسجل بسحبه الخاص، لكنهم يرتبطون بنفس OB
+${TOOL_LIST_TEXT}
 
-#### د. البحث الجزئي عن الرول
-- يقبل المستخدم كتابة جزء من الكود (مثل "HXS" بدلاً من "HXS-BF-001")
-- ابحث عن كل الرولات المطابقة واعرضها
-- إذا كان هناك تطابق واحد فقط، سجل مباشرة
-- إذا كان هناك عدة تطابقات، اطلب التحديد
+### متى تستخدم الأداة؟
+- إذا طلب المستخدم **تسجيل/إضافة/حذف/تعديل/صرف** → استخدم الأداة المناسبة **فوراً**.
+- إذا كان السؤال **استعلامياً** (كم؟ ما هو؟ أظهر؟) → أجب نصياً بدون أداة.
+- **لا ترفض أي طلب تنفيذ** — إذا وُجدت أداة، استخدمها بلا تردد.
 
-#### هـ. التسلسل التلقائي
-- عند بدء OB جديد، خذ التسلسل التالي تلقائياً (OB-0020، OB-0021، ...)
-- لا تطلب من المستخدم تذكر الرقم
+### كيف تستدعي الأداة؟ (صيغة إلزامية)
+عندما تقرر استخدام أداة، أخرج **فقط** السطرين التاليين بدون أي نص إضافي:
 
-### 5. قواعد المرتب (مهم جداً)
-- المرتب الأساسي = مرتب ثابت شهري (لا يتأثر بالغياب)
-- صافي المرتب = المرتب الثابت + العمولات - السلفيات - الجزاءات
-- العمولات تُحسب من سجل الخدمات
-- السلفيات تُخصم من المرتب
-- الجزاءات تُخصم من المرتب
-- الغياب لا يخفض المرتب الأساسي
+TOOL: <اسم_الأداة>
+ARGS: <json_صالح>
 
-### 6. الإجراءات
-- إذا طلب المستخدم إضافة/تعديل بيانات، اطلب التأكيد واذكر البيانات التي ستسجلها
-- إذا كان السؤال غامضاً، اطلب التوضيح بأدب
-- قدم اقتراحات ذكية بناءً على البيانات (مثل: تنبيه لنقص مخزون، رول أوشك على النفاذ)
-- عند تسجيل استهلاك، اذكر: الرول، الأمتار، OB، الرصيد المتبقي
+مثال:
+TOOL: record_attendance
+ARGS: {"employeeName":"أحمد السيد","date":"2026-07-05","status":"ح"}
 
-ستحصل على لقطة بيانات حديثة (JSON) — استخدمها بدقة للإجابة.`
+### قواعد التنفيذ:
+1. استخدم اسم الموظف/كود الرول كما هو في بيانات JSON بالضبط.
+2. التاريخ بصيغة YYYY-MM-DD. "اليوم" = meta.snapshotDate.
+3. status للحضور: ح=حضور، غ=غياب، إ=إجازة رسمية، ر=إجازة أسبوعية.
+4. لا تضف أي نص قبل أو بعد استدعاء الأداة — فقط السطرين.
+5. النظام سيعرض ملخصاً وينتظر تأكيد المستخدم — لا تطلب التأكيد بنفسك.
+
+## نظام البروتيكشن (PPF Rolls):
+- "OB" = رقم أمر الشغل. كل عملية استهلاك لها OB.
+- "نفس السابق" = نفس العميل والسيارة، بس رول آخر.
+- عدة رولات على نفس OB → سجّل كل رول كعملية منفصلة بنفس OB.
+- البحث الجزئي: لو كتب "HXS" بدل "HXS-BF-001" → ابحث في snapshot.
+
+ستحصل على لقطة بيانات حديثة (JSON) — استخدمها بدقة.`
 
 // ─── Multi-Provider Configuration ────────────────────────────
 // LM 5 (Llama 5) - primary AI provider via OpenRouter
@@ -702,7 +711,99 @@ async function callZAI(messages: any[], temperature: number, maxTokens: number):
 }
 
 // ─── Smart fallback when no AI provider is available ────────
-// Generates a helpful response based on the data snapshot + user question
+// Generates a helpful response based on the data snapshot + user question// ─── Text-based tool call parser (from v3 strong assistant) ───
+// يستخرج TOOL name و ARGS json من النص. يتسامح مع JSON ناقص.
+function repairJson(str: string): string {
+  let s = str.trim().replace(/,\s*$/, '')
+  let opens = 0, openBrackets = 0, inString = false, escape = false
+  for (const ch of s) {
+    if (escape) { escape = false; continue }
+    if (ch === '\\') { escape = true; continue }
+    if (ch === '"') { inString = !inString; continue }
+    if (inString) continue
+    if (ch === '{') opens++
+    else if (ch === '}') opens--
+    else if (ch === '[') openBrackets++
+    else if (ch === ']') openBrackets--
+  }
+  while (openBrackets > 0) { s += ']'; openBrackets-- }
+  while (opens > 0) { s += '}'; opens-- }
+  return s
+}
+
+function tryParseJson(str: string): any | null {
+  try { return JSON.parse(str) } catch {}
+  try { return JSON.parse(repairJson(str)) } catch {}
+  return null
+}
+
+function parseToolCall(text: string): { toolName: string; args: any } | null {
+  if (!text) return null
+  const cleaned = text.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim()
+  // Pattern 1: TOOL: name \n ARGS: {json}
+  const m1 = cleaned.match(/^TOOL:\s*([a-z_]+)\s*\n\s*ARGS:\s*(.+)$/is)
+  if (m1) {
+    const toolName = m1[1].toLowerCase().trim()
+    if (TOOL_NAMES.includes(toolName)) {
+      const parsed = tryParseJson(m1[2].trim())
+      if (parsed) return { toolName, args: parsed }
+    }
+  }
+  // Pattern 2: TOOL: name ARGS: {json} (same line)
+  const m2 = cleaned.match(/^TOOL:\s*([a-z_]+)\s+ARGS:\s*(.+)$/is)
+  if (m2) {
+    const toolName = m2[1].toLowerCase().trim()
+    if (TOOL_NAMES.includes(toolName)) {
+      const parsed = tryParseJson(m2[2].trim())
+      if (parsed) return { toolName, args: parsed }
+    }
+  }
+  return null
+}
+
+function cleanReply(text: string): string {
+  if (!text) return ''
+  let out = text.replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+  out = out.replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0))
+  out = out.replace(/[\u200E\u200F\u202A-\u202E]/g, '')
+  out = out.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '')
+  return out.trim()
+}
+
+// ─── Tool table map (for audit logging) ──────────────────────
+const TOOL_TABLE_MAP: Record<string, string> = {
+  create_service: 'services', add_employee: 'employees', record_attendance: 'attendance', batch_attendance: 'attendance',
+  record_advance: 'advances', record_penalty: 'penalties', add_stock_item: 'stock_items',
+  stock_movement: 'stock_movements', add_roll: 'rolls', roll_consumption: 'roll_consumptions',
+  create_customer: 'customers', create_supplier: 'suppliers', create_offer: 'offers',
+  create_stock_invoice: 'stock_invoices', delete_service: 'services', delete_stock_item: 'stock_items',
+  pay_salary: 'payroll_payments',
+}
+
+// ─── Execute a confirmed tool call ───────────────────────────
+export async function confirmAndExecuteTool(toolName: string, args: any, context?: { userId?: string; userName?: string }) {
+  const { executeTool } = await import('@/lib/ai-tools')
+  const { logAudit } = await import('@/lib/audit')
+  const result = await executeTool(toolName, args, context)
+  await db.aiConversation.create({ data: { userMessage: `[تأكيد] ${toolName}`, aiResponse: result.message, intentType: 'add', actionTaken: result.success ? toolName : `failed:${toolName}` } })
+  if (result.success) {
+    try {
+      const isDelete = toolName.startsWith('delete_')
+      await logAudit({
+        action: isDelete ? 'delete' : 'create',
+        tableName: TOOL_TABLE_MAP[toolName] || toolName,
+        recordId: result.data?.id || result.data?.deletedCode || null,
+        newValue: result.data,
+        source: 'ai_assistant',
+        userId: context?.userId || null,
+        userName: context?.userName || null,
+      })
+    } catch (e) { /* audit logging is best-effort */ }
+  }
+  return result
+}
+
+
 async function smartFallback(userMessage: string, snapshot: any): Promise<string> {
   const msg = userMessage.toLowerCase()
   const lower = userMessage.trim()
@@ -803,98 +904,82 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
   try {
     const snapshot = await buildDataSnapshot()
 
-    // ─── Check if this is a protection command first ─────────
-    const protectionCmd = parseProtectionCommand(userMessage)
-    if (protectionCmd.isProtectionCommand) {
-      // Try to execute the protection command directly
-      const protectionResponse = await executeProtectionCommand(protectionCmd)
-      if (protectionResponse) {
-        await db.aiConversation.create({
-          data: {
-            userMessage,
-            aiResponse: protectionResponse,
-            intentType: 'protection_action',
-          },
-        })
-        return { reply: protectionResponse, intent: 'protection_action', provider: 'direct' }
-      }
-    }
-
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'system', content: `بيانات المركز الحالية (JSON مفصل):\n${JSON.stringify(snapshot, null, 2)}` },
+      { role: 'system', content: `بيانات المركز الحالية (JSON):\n${JSON.stringify(snapshot)}` },
       ...conversationHistory.slice(-6).map(m => ({ role: m.role, content: m.content })),
       { role: 'user', content: userMessage },
     ]
 
-    let reply = ''
+    let rawReply = ''
     let providerUsed = ''
     const errors: string[] = []
 
-    // Try 1: LM 5 (Llama 5) via OpenRouter — primary provider
+    // Try 1: OpenRouter (Llama 3.3 70B) — primary provider
     if (PROVIDERS.lm5.enabled) {
       try {
-        reply = await callOpenAICompatible(
-          PROVIDERS.lm5.url,
-          PROVIDERS.lm5.apiKey,
-          PROVIDERS.lm5.model,
-          messages,
-          0.2,
-          1500,
-          PROVIDERS.lm5.headers,
+        rawReply = await callOpenAICompatible(
+          PROVIDERS.lm5.url, PROVIDERS.lm5.apiKey, PROVIDERS.lm5.model,
+          messages, 0.2, 800, PROVIDERS.lm5.headers,
         )
-        providerUsed = 'lm5-llama-5'
-      } catch (e: any) { errors.push(`LM5: ${e.message}`) }
+        providerUsed = 'openrouter-llama-3.3-70b'
+      } catch (e: any) { errors.push(`OpenRouter: ${e.message}`) }
     }
 
     // Try 2: Groq (Llama 3.3 70B) — fast fallback
-    if (!reply && PROVIDERS.groq.enabled) {
+    if (!rawReply && PROVIDERS.groq.enabled) {
       try {
-        reply = await callOpenAICompatible(PROVIDERS.groq.url, PROVIDERS.groq.apiKey, PROVIDERS.groq.model, messages, 0.2, 600)
+        rawReply = await callOpenAICompatible(PROVIDERS.groq.url, PROVIDERS.groq.apiKey, PROVIDERS.groq.model, messages, 0.2, 600)
         providerUsed = 'groq-llama-3.3-70b'
       } catch (e: any) { errors.push(`Groq: ${e.message}`) }
     }
 
-    // Try 3: OpenRouter (Llama 3.1 8B free)
-    if (!reply && PROVIDERS.openrouter.enabled) {
+    // Try 3: OpenRouter alternative (Llama 3.1 8B)
+    if (!rawReply && PROVIDERS.openrouter.enabled) {
       try {
-        reply = await callOpenAICompatible(
-          PROVIDERS.openrouter.url,
-          PROVIDERS.openrouter.apiKey,
-          PROVIDERS.openrouter.model,
-          messages,
-          0.2,
-          1200,
-          PROVIDERS.openrouter.headers,
+        rawReply = await callOpenAICompatible(
+          PROVIDERS.openrouter.url, PROVIDERS.openrouter.apiKey, PROVIDERS.openrouter.model,
+          messages, 0.2, 600, PROVIDERS.openrouter.headers,
         )
         providerUsed = 'openrouter-llama-3.1-8b'
       } catch (e: any) { errors.push(`OpenRouter: ${e.message}`) }
     }
 
-    // Try 4: z-ai-web-dev-sdk (GLM) — always available
-    if (!reply) {
+    // Try 4: z-ai-web-dev-sdk (GLM)
+    if (!rawReply) {
       try {
-        reply = await callZAI(messages, 0.2, 600)
+        rawReply = await callZAI(messages, 0.2, 600)
         providerUsed = 'z-ai-glm'
       } catch (e: any) { errors.push(`Z-AI: ${e.message}`) }
     }
 
-    // Try 5: Smart fallback — generates helpful response from database
-    if (!reply) {
-      reply = await smartFallback(userMessage, snapshot)
+    // Try 5: Smart fallback
+    if (!rawReply) {
+      rawReply = await smartFallback(userMessage, snapshot)
       providerUsed = 'smart-fallback'
     }
 
-    if (!reply) {
-      reply = `عذراً، حدث خطأ في جميع مزودي الذكاء الاصطناعي. ${errors.join(' | ')}`
+    if (!rawReply) {
+      rawReply = `عذراً، حدث خطأ في جميع المزودين. ${errors.join(' | ')}`
       providerUsed = 'none'
     }
 
+    // ─── Parse text-based tool call ────────────────────────────
+    // لو المزود رجع استدعاء أداة، أنشئ ملخص عربي وانتظر تأكيد المستخدم
+    const toolCall = parseToolCall(rawReply)
+    if (toolCall) {
+      const summary = summarizeToolCall(toolCall.toolName, toolCall.args)
+      await db.aiConversation.create({
+        data: { userMessage, aiResponse: summary, intentType: 'add', actionTaken: `pending:${toolCall.toolName}` },
+      })
+      return { reply: summary, intent: 'add', provider: providerUsed, pendingAction: { tool: toolCall.toolName, args: toolCall.args } }
+    }
+
+    const reply = cleanReply(rawReply)
     await db.aiConversation.create({
       data: { userMessage, aiResponse: reply, intentType: detectIntent(userMessage) },
     })
-
-    return { reply, intent: detectIntent(userMessage), provider: providerUsed, errors }
+    return { reply, intent: detectIntent(userMessage), provider: providerUsed }
   } catch (e: any) {
     console.error('AI Assistant error:', e)
     return { reply: `عذراً، حدث خطأ. ${e.message || ''}`, intent: 'error', provider: 'none' }
