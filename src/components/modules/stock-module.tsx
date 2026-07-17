@@ -235,7 +235,7 @@ export function StockModule() {
       )}
 
       <MovementDialog open={showMovementDialog} onOpenChange={setShowMovementDialog} item={selectedItem} onSuccess={loadItems} />
-      <AddItemDialog open={showAddDialog} onOpenChange={setShowAddDialog} onSuccess={loadItems} />
+      <AddItemDialog open={showAddDialog} onOpenChange={setShowAddDialog} onSuccess={loadItems} existingItems={items} />
     </div>
   )
 
@@ -372,10 +372,11 @@ function MovementDialog({ open, onOpenChange, item, onSuccess }: {
   )
 }
 
-function AddItemDialog({ open, onOpenChange, onSuccess }: {
+function AddItemDialog({ open, onOpenChange, onSuccess, existingItems }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   onSuccess: () => void
+  existingItems: StockItem[]
 }) {
   const { t, lang } = useI18n()
   const [form, setForm] = useState({
@@ -383,6 +384,28 @@ function AddItemDialog({ open, onOpenChange, onSuccess }: {
     currentQty: '', minLevel: '', unitPrice: '',
   })
   const [saving, setSaving] = useState(false)
+
+  // ─── Suggested stock code (next sequence for the selected category) ───
+  // Format: STL-001 (polish), STD-001 (detailing), STN-001 (nano), STT-001 (tools)
+  const STOCK_PREFIXES: Record<string, string> = {
+    polish: 'STL', detailing: 'STD', nano: 'STN', tools: 'STT',
+  }
+  function computeSuggestedCode(cat: string): string {
+    const prefix = STOCK_PREFIXES[cat] || 'STT'
+    const re = new RegExp(`^${prefix}-(\\d+)$`, 'i')
+    let max = 0
+    for (const it of existingItems) {
+      const m = (it.code || '').match(re)
+      if (m) { const n = parseInt(m[1], 10); if (n > max) max = n }
+    }
+    return `${prefix}-${String(max + 1).padStart(3, '0')}`
+  }
+  const suggestedCode = computeSuggestedCode(form.category)
+
+  // Existing items with the same name (prevents duplicates)
+  const matchingItems = form.name
+    ? existingItems.filter(it => it.name.toLowerCase().includes(form.name.toLowerCase())).slice(0, 5)
+    : []
 
   async function handleSubmit() {
     if (!form.name) {
@@ -420,7 +443,32 @@ function AddItemDialog({ open, onOpenChange, onSuccess }: {
         <div className="space-y-3 py-2">
           <div>
             <Label className="text-gray-400 text-xs">{t('item')} *</Label>
-            <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" placeholder="Sonax Active Foam 2L" />
+            <Input value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} list="stock-names-list" className="bg-[#000] border-white/10 text-white mt-1" placeholder="Sonax Active Foam 2L" />
+            <datalist id="stock-names-list">
+              {existingItems.map(it => (
+                <option key={it.id} value={it.name}>{it.code} — {it.category} ({it.currentQty} {it.unit})</option>
+              ))}
+            </datalist>
+            {/* Suggested code for the new item */}
+            <p className="text-[10px] text-gray-500 mt-1">
+              {lang === 'ar' ? `الكود المقترح: ` : `Suggested code: `}
+              <span className="font-mono text-[#BB86FC]">{suggestedCode}</span>
+            </p>
+            {/* Show matching existing items to prevent duplicates */}
+            {matchingItems.length > 0 && (
+              <div className="mt-2 p-2 bg-[#0A0A0A] border border-white/5 rounded">
+                <p className="text-[10px] text-gray-500 mb-1">
+                  {lang === 'ar' ? 'أصناف موجودة مشابهة:' : 'Similar existing items:'}
+                </p>
+                <div className="flex flex-wrap gap-1">
+                  {matchingItems.map(it => (
+                    <span key={it.id} className="text-[10px] font-mono text-[#03DAC6] bg-[#03DAC6]/10 px-1.5 py-0.5 rounded">
+                      {it.code} — {it.name} ({it.currentQty} {it.unit})
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <Label className="text-gray-400 text-xs">{t('category')}</Label>
