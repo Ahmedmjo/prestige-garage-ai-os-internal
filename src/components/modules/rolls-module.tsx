@@ -659,8 +659,14 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
               value={form.code}
               onChange={e => setForm({ ...form, code: e.target.value })}
               placeholder={suggestedCode || 'HXS-BF-001'}
+              list="roll-codes-list"
               className="bg-[#000] border-white/10 text-white mt-1"
             />
+            <datalist id="roll-codes-list">
+              {existingRolls.map(r => (
+                <option key={r.id} value={r.code}>{r.code} — {r.brand} {r.type} ({r.status})</option>
+              ))}
+            </datalist>
             {suggestedCode && !form.code && (
               <button
                 onClick={() => setForm({ ...form, code: suggestedCode })}
