@@ -20,6 +20,7 @@ import { LanguageToggle } from '@/components/prestige/language-toggle'
 import { PrestigeLogo } from '@/components/prestige/logo'
 import { BackgroundDecoration } from '@/components/prestige/background'
 import { PWAInstallButton } from '@/components/prestige/pwa-install-button'
+import { PasswordGate } from '@/components/prestige/password-gate'
 import { Dashboard } from '@/components/modules/dashboard'
 import { RollsModule } from '@/components/modules/rolls-module'
 import { EmployeesModule } from '@/components/modules/employees-module'
@@ -72,6 +73,7 @@ export default function Home() {
   }, [])
 
   return (
+    <PasswordGate>
     <div className="min-h-screen bg-black text-white flex relative" dir={dir}>
       <BackgroundDecoration />
 
@@ -190,5 +192,6 @@ export default function Home() {
         </main>
       </div>
     </div>
+    </PasswordGate>
   )
 }
