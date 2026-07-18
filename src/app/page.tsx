@@ -29,6 +29,7 @@ import { ServicesModule } from '@/components/modules/services-module'
 import { AIChat } from '@/components/modules/ai-chat'
 import { AttendanceModule } from '@/components/modules/attendance-module'
 import { ProtectionModule } from '@/components/modules/protection-module'
+import { ErrorBoundary } from '@/components/prestige/error-boundary'
 import { SettingsModule } from '@/components/modules/settings-module'
 
 type TabId = 'dashboard' | 'rolls' | 'protection' | 'employees' | 'attendance' | 'stock' | 'services' | 'ai' | 'settings'
@@ -181,7 +182,7 @@ export default function Home() {
         {/* Module content — NO animation to prevent shaking */}
         <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-x-hidden" key={activeTab + lang}>
           {activeTab === 'dashboard' && <Dashboard onNavigate={setActiveTab} />}
-          {activeTab === 'protection' && <ProtectionModule />}
+          {activeTab === 'protection' && <ErrorBoundary><ProtectionModule /></ErrorBoundary>}
           {activeTab === 'rolls' && <RollsModule />}
           {activeTab === 'employees' && <EmployeesModule />}
           {activeTab === 'attendance' && <AttendanceModule />}
