@@ -651,6 +651,7 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
   onSuccess: () => void
 }) {
   const { t, lang } = useI18n()
+  const isWasteMode = mode === 'waste'
   const [form, setForm] = useState({
     rollCode: '', date: new Date().toISOString().split('T')[0],
     clientName: '', carType: '', plateNumber: '',
