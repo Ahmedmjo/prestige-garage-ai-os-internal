@@ -627,6 +627,22 @@ ARGS: <json_صالح>
 TOOL: record_attendance
 ARGS: {"employeeName":"أحمد السيد","date":"2026-07-05","status":"ح"}
 
+### قواعد هامّة جداً:
+
+#### أ. الهالك (Waste) — مهم:
+- "سجل هالك X متر من رول YYY" = استدعِ roll_consumption بـ waste=X و metersUsed=0
+- "سجل هالك على رول YYY" = استدعِ roll_consumption بـ waste=<القيمة> و metersUsed=0
+- **لا تستخدم add_roll أبداً لتسجيل الهالك!** add_roll فقط لإضافة رول جديد للمخزون.
+- الهالك = بواقي/قصاصات/هدر من رول موجود → يُخصم من رصيد الرول الحالي.
+- مثال: "سجل هالك 1.5 متر من 3M-SG-004" →
+  TOOL: roll_consumption
+  ARGS: {"rollCode":"3M-SG-004","metersUsed":0,"waste":1.5}
+
+#### ب. الفرق بين add_roll و roll_consumption:
+- **add_roll**: لما تيجيب رول جديد من المورد (لفة كاملة جديدة) → بتضيفه للمخزون.
+- **roll_consumption**: لما تسحب/تستهلك/تهالك من رول موجود → بتخصم من رصيده.
+- أي حاجة "هالك/بواقي/هدر/سحب/استهلاك" على رول موجود → roll_consumption فقط.
+
 ### قواعد التنفيذ:
 1. استخدم اسم الموظف/كود الرول كما هو في بيانات JSON بالضبط.
 2. التاريخ بصيغة YYYY-MM-DD. "اليوم" = meta.snapshotDate.

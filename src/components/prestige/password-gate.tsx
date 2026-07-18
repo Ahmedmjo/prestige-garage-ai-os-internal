@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { Lock, ArrowLeft } from 'lucide-react'
-import { PrestigeLogo } from '@/components/prestige/logo'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -11,8 +10,7 @@ const ACCESS_PASSWORD = '0203'
 
 /**
  * Password Gate — يظهر قبل التطبيق الرئيسي.
- * المستخدم يدخل كلمة السر "0203" → تتخزن في localStorage → التطبيق يفتح.
- * مبسّط للاستخدام الداخلي (مش أمان عالي — للحماية من الوصول العابر).
+ * خلفية بصورة العلامة التجارية + خانة كلمة المرور.
  */
 export function PasswordGate({ children }: { children: React.ReactNode }) {
   const [granted, setGranted] = useState(false)
@@ -45,7 +43,14 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
   if (checking) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        <div className="w-10 h-10 border-2 border-[#DC143C]/30 border-t-[#DC143C] rounded-full animate-spin" />
+        {/* Splash image as loading screen */}
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-40"
+          style={{ backgroundImage: 'url(/prestige-splash.png)' }}
+        />
+        <div className="relative z-10">
+          <div className="w-12 h-12 border-2 border-[#DC143C]/30 border-t-[#DC143C] rounded-full animate-spin mx-auto" />
+        </div>
       </div>
     )
   }
@@ -55,44 +60,54 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="min-h-screen bg-black flex items-center justify-center p-4" dir="rtl">
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden" dir="rtl">
+      {/* Splash image as full background */}
+      <div
+        className="absolute inset-0 bg-cover bg-center"
+        style={{ backgroundImage: 'url(/prestige-splash.png)' }}
+      />
+      {/* Dark overlay for readability */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
+
+      {/* Content */}
+      <div className="relative z-10 w-full max-w-sm">
         <div className="flex flex-col items-center mb-8">
-          <div className="mb-4">
-            <PrestigeLogo size={96} />
+          <div className="text-center">
+            <h1 className="text-3xl font-extrabold text-white tracking-wider drop-shadow-[0_2px_8px_rgba(220,20,60,0.5)]">
+              PRESTIGE GARAGE
+            </h1>
+            <p className="text-xs text-gray-300 mt-2 tracking-widest">نظام الإدارة الداخلي</p>
           </div>
-          <h1 className="text-2xl font-bold text-white tracking-wider">PRESTIGE GARAGE</h1>
-          <p className="text-xs text-gray-500 mt-1 tracking-widest">نظام الإدارة الداخلي</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="relative">
-            <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
+            <Lock className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
             <Input
               type="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(false) }}
               placeholder="كلمة المرور"
-              className="bg-[#0A0A0A] border-white/10 text-white text-center text-lg tracking-widest pr-10 h-12"
+              className="bg-black/60 border-white/20 text-white text-center text-lg tracking-widest pr-10 h-12 backdrop-blur-sm placeholder:text-gray-400"
               autoFocus
               dir="ltr"
             />
           </div>
 
           {error && (
-            <p className="text-[#DC143C] text-sm text-center">كلمة المرور غير صحيحة</p>
+            <p className="text-[#FF4444] text-sm text-center font-medium">كلمة المرور غير صحيحة</p>
           )}
 
           <Button
             type="submit"
-            className="w-full prestige-gradient border-0 h-12 text-base"
+            className="w-full prestige-gradient border-0 h-12 text-base font-semibold"
           >
             <ArrowLeft size={18} className="ml-2" />
             دخول
           </Button>
         </form>
 
-        <p className="text-center text-[10px] text-gray-600 mt-8">
+        <p className="text-center text-[10px] text-gray-500 mt-8">
           Prestige Garage AI-OS © 2026
         </p>
       </div>
