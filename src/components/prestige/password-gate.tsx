@@ -19,6 +19,7 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState(false)
 
   useEffect(() => {
+    // Check localStorage immediately — no waiting for images
     try {
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored === ACCESS_PASSWORD) {
@@ -40,17 +41,11 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
     }
   }
 
+  // Loading state — simple spinner, NO background image (don't wait for image load)
   if (checking) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center">
-        {/* Splash image as loading screen */}
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-40"
-          style={{ backgroundImage: 'url(/prestige-splash.png)' }}
-        />
-        <div className="relative z-10">
-          <div className="w-12 h-12 border-2 border-[#DC143C]/30 border-t-[#DC143C] rounded-full animate-spin mx-auto" />
-        </div>
+        <div className="w-10 h-10 border-2 border-[#DC143C]/30 border-t-[#DC143C] rounded-full animate-spin" />
       </div>
     )
   }
@@ -61,10 +56,10 @@ export function PasswordGate({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-black flex items-center justify-center p-4 relative overflow-hidden" dir="rtl">
-      {/* Splash image as full background */}
+      {/* Splash image as full background — non-blocking */}
       <div
         className="absolute inset-0 bg-cover bg-center"
-        style={{ backgroundImage: 'url(/prestige-splash.png)' }}
+        style={{ backgroundImage: 'url(/prestige-splash.jpg)' }}
       />
       {/* Dark overlay for readability */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/50 to-black/80" />
