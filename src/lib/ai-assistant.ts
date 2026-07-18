@@ -641,9 +641,16 @@ ARGS: {"employeeName":"أحمد السيد","date":"2026-07-05","status":"ح"}
 #### أ.2 تسجيل هالك لعدة رولات دفعة واحدة:
 - "سجل هالك لكل الرولات أقل من 2 متر" → استدعِ batch_waste بقائمة items
 - كل عنصر في items = { rollCode, waste }
-- مثال: "سجل هالك لكل الرولات أقل من 2 متر بـ OB-0050"
+- لو المستخدم طلب OB واحد للكل → استخدم workOrder (قيمة واحدة)
+- لو المستخدم طلب "كل رول OB مستقل" أو "كل رول بعملية منفصلة" → استخدم startWorkOrder
+  (كل رول ياخد OB متسلسل: الأول = startWorkOrder، التاني = اللي بعده، إلخ)
+- مثال (OB واحد للكل): "سجل هالك لكل الرولات أقل من 2 متر بـ OB-0050"
   TOOL: batch_waste
   ARGS: {"items":[{"rollCode":"3M-SG-001","waste":1.5},{"rollCode":"3M-SG-005","waste":2}],"workOrder":"OB-0050"}
+- مثال (OB مستقل لكل رول): "سجل هالك لكل رول بـ OB مستقل، ابدأ من OB-0050"
+  TOOL: batch_waste
+  ARGS: {"items":[{"rollCode":"3M-SG-001","waste":1.5},{"rollCode":"3M-SG-005","waste":2}],"startWorkOrder":"OB-0050"}
+  → الرول الأول ياخد OB-0050، التاني OB-0051، إلخ
 - استخدم batch_waste فقط عندما المستخدم يطلب عدة رولات مرة واحدة.
 
 #### ب. الفرق بين add_roll و roll_consumption:

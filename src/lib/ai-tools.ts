@@ -237,7 +237,8 @@ export const AI_TOOLS = [
               required: ['rollCode', 'waste'],
             },
           },
-          workOrder: { type: 'string', description: 'رقم أمر الشغل (OB) واحد لكل الرولات (اختياري)' },
+          workOrder: { type: 'string', description: 'رقم أمر الشغل (OB) واحد لكل الرولات (اختياري — استخدمه لو عاوز نفس OB للكل)' },
+          startWorkOrder: { type: 'string', description: 'رقم أمر الشغل الأول (OB-XXXX) — كل رول ياخد OB مستقل متسلسل: الأول startWorkOrder، التاني اللي بعده، إلخ. استخدمه لما المستخدم يقول "كل رول OB مستقل" أو "كل رول بعملية منفصلة".' },
           notes: { type: 'string', description: 'ملاحظات عامة (اختياري)' },
         },
         required: ['items'],
@@ -427,12 +428,28 @@ export function summarizeToolCall(name: string, args: any): string {
     }
     case 'batch_waste': {
       const items = Array.isArray(args.items) ? args.items : []
-      const lines = items.map((it: any, i: number) => `${i + 1}. ${it.rollCode} — هالك ${num(it.waste)}م`)
+      const startOB = args.startWorkOrder as string | undefined
+      // Parse the starting OB number for sequential display
+      let obNum: number | null = null
+      if (startOB) {
+        const m = startOB.match(/OB[-\s]*(\d+)/i)
+        if (m) obNum = parseInt(m[1], 10)
+      }
+      const lines = items.map((it: any, i: number) => {
+        const obLabel = obNum !== null
+          ? `OB-${String(obNum + i).padStart(4, '0')}`
+          : (args.workOrder || '—')
+        return `${i + 1}. ${it.rollCode} — هالك ${num(it.waste)}م — ${obLabel}`
+      })
       const parts: string[] = [
         `🎞️ تسجيل هالك لـ ${items.length} رول:`,
         ...lines,
       ]
-      if (args.workOrder) parts.push(`• أمر الشغل: ${args.workOrder}`)
+      if (obNum !== null) {
+        parts.push(`• كل رول OB مستقل (من ${startOB} إلى OB-${String(obNum + items.length - 1).padStart(4, '0')})`)
+      } else if (args.workOrder) {
+        parts.push(`• أمر الشغل: ${args.workOrder}`)
+      }
       parts.push('هل أؤكد تسجيل الهالك للكل؟')
       return parts.join('\n')
     }
@@ -795,9 +812,20 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
           return { success: false, message: '❌ قائمة الرولات فارغة.' }
         }
         const workOrder = args.workOrder || null
+        // If startWorkOrder is provided, each roll gets a sequential OB
+        let startObNum: number | null = null
+        if (args.startWorkOrder) {
+          const m = String(args.startWorkOrder).match(/OB[-\s]*(\d+)/i)
+          if (m) startObNum = parseInt(m[1], 10)
+        }
         const results: string[] = []
         const errors: string[] = []
-        for (const item of items) {
+        for (let idx = 0; idx < items.length; idx++) {
+          const item = items[idx]
+          // Assign per-roll OB if startWorkOrder is set, otherwise use shared workOrder
+          const perRollOB = startObNum !== null
+            ? `OB-${String(startObNum + idx).padStart(4, '0')}`
+            : workOrder
           const roll = await findRollByCode(item.rollCode)
           if (!roll) {
             errors.push(`${item.rollCode}: غير موجود`)
@@ -816,7 +844,7 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
             data: {
               rollId: roll.id, rollCode: roll.code, date: new Date(),
               metersUsed: 0, waste,
-              workOrder,
+              workOrder: perRollOB,
               notes: args.notes || 'تسجيل هالك دفعة',
               transactionType: 'هالك',
             },
@@ -839,7 +867,7 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
               },
             })
           }
-          results.push(`${roll.code}: ${waste}م (متبقي ${newRemaining.toFixed(2)}م)`)
+          results.push(`${roll.code}: ${waste}م — ${perRollOB || 'بدون OB'} (متبقي ${newRemaining.toFixed(2)}م)`)
         }
         let msg = `✅ تم تسجيل الهالك لـ ${results.length} رول:\n` + results.map(r => `• ${r}`).join('\n')
         if (errors.length > 0) {
