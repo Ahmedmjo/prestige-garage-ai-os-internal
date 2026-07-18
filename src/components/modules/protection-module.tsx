@@ -674,9 +674,17 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
         workOrder: duplicateContext.workOrder,
       }))
     } else {
-      setForm(f => ({ ...f, workOrder: defaultOB }))
+      // Reset form with the correct OB/OBX based on mode
+      setForm(f => {
+        const baseReset = { rollCode: '', metersUsed: '', waste: '', usageArea: '' }
+        if (isWasteMode) {
+          // Waste mode: clear client/car/plate, set OBX
+          return { ...f, ...baseReset, clientName: '', carType: '', plateNumber: '', workOrder: defaultOB }
+        }
+        return { ...f, ...baseReset, workOrder: defaultOB }
+      })
     }
-  }, [preselectedRoll, defaultOB, duplicateContext, open])
+  }, [preselectedRoll, defaultOB, duplicateContext, open, isWasteMode, mode])
 
   async function handleSubmit() {
     if (!form.rollCode || (!form.metersUsed && !form.waste)) {

@@ -685,8 +685,13 @@ ARGS: {"employeeName":"أحمد السيد","date":"2026-07-05","status":"ح"}
 // LM 5 (Llama 5) - primary AI provider via OpenRouter
 // Falls back to Groq (Llama 3.3 70B) and Z-AI GLM
 const PROVIDERS = {
-  // Primary provider via OpenRouter — Llama 3.3 70B Instruct
-  // (Llama 5 not yet available on OpenRouter; using the best available model)
+  // Primary provider: Gemini (Google AI Studio — free tier)
+  gemini: {
+    enabled: !!process.env.GEMINI_API_KEY,
+    apiKey: process.env.GEMINI_API_KEY || '',
+    model: 'gemini-flash-latest',
+  },
+  // Secondary: LM5 (OpenRouter — Llama 3.3 70B)
   lm5: {
     enabled: !!process.env.OPENROUTER_API_KEY,
     apiKey: process.env.OPENROUTER_API_KEY || '',
@@ -736,6 +741,36 @@ async function callOpenAICompatible(url: string, apiKey: string, model: string, 
   }
   const data = await response.json()
   return data.choices[0]?.message?.content || 'عذراً، لم أتمكن من توليد رد.'
+}
+
+// ─── Gemini caller (Google AI Studio) ────────────────────────
+async function callGemini(messages: any[], temperature: number, maxTokens: number): Promise<string> {
+  const systemInstruction = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n')
+  const contents = messages.filter(m => m.role !== 'system').map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }))
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${PROVIDERS.gemini.model}:generateContent`,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-goog-api-key': PROVIDERS.gemini.apiKey,
+      },
+      body: JSON.stringify({
+        contents,
+        systemInstruction: { parts: [{ text: systemInstruction }] },
+        generationConfig: { temperature, maxOutputTokens: maxTokens },
+      }),
+    }
+  )
+  if (!response.ok) {
+    const errText = await response.text().catch(() => '')
+    throw new Error(`Gemini API error ${response.status}: ${errText.slice(0, 200)}`)
+  }
+  const data = await response.json()
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'عذراً، لم أتمكن من توليد رد.'
 }
 
 async function callZAI(messages: any[], temperature: number, maxTokens: number): Promise<string> {
@@ -955,8 +990,16 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
     let providerUsed = ''
     const errors: string[] = []
 
-    // Try 1: OpenRouter (Llama 3.3 70B) — primary provider
-    if (PROVIDERS.lm5.enabled) {
+    // Try 1: Gemini (Google AI Studio) — primary provider
+    if (PROVIDERS.gemini.enabled) {
+      try {
+        rawReply = await callGemini(messages, 0.2, 800)
+        providerUsed = 'gemini-flash'
+      } catch (e: any) { errors.push(`Gemini: ${e.message}`) }
+    }
+
+    // Try 2: LM5 (OpenRouter Llama 3.3 70B) — secondary
+    if (!rawReply && PROVIDERS.lm5.enabled) {
       try {
         rawReply = await callOpenAICompatible(
           PROVIDERS.lm5.url, PROVIDERS.lm5.apiKey, PROVIDERS.lm5.model,
@@ -966,7 +1009,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`OpenRouter: ${e.message}`) }
     }
 
-    // Try 2: Groq (Llama 3.3 70B) — fast fallback
+    // Try 3: Groq (Llama 3.3 70B) — fast fallback
     if (!rawReply && PROVIDERS.groq.enabled) {
       try {
         rawReply = await callOpenAICompatible(PROVIDERS.groq.url, PROVIDERS.groq.apiKey, PROVIDERS.groq.model, messages, 0.2, 600)
@@ -974,7 +1017,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`Groq: ${e.message}`) }
     }
 
-    // Try 3: OpenRouter alternative (Llama 3.1 8B)
+    // Try 4: OpenRouter alternative (Llama 3.1 8B)
     if (!rawReply && PROVIDERS.openrouter.enabled) {
       try {
         rawReply = await callOpenAICompatible(
@@ -985,7 +1028,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`OpenRouter: ${e.message}`) }
     }
 
-    // Try 4: z-ai-web-dev-sdk (GLM)
+    // Try 5: z-ai-web-dev-sdk (GLM)
     if (!rawReply) {
       try {
         rawReply = await callZAI(messages, 0.2, 600)
@@ -993,7 +1036,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`Z-AI: ${e.message}`) }
     }
 
-    // Try 5: Smart fallback
+    // Try 6: Smart fallback
     if (!rawReply) {
       rawReply = await smartFallback(userMessage, snapshot)
       providerUsed = 'smart-fallback'
