@@ -487,15 +487,15 @@ export function ProtectionModule() {
               >
                 <div className="flex items-center justify-between mb-2">
                   <span className="font-mono font-bold text-[#03DAC6] text-sm">{ob.workOrder}</span>
-                  <span className="text-[10px] text-gray-500">{new Date(ob.date).toLocaleDateString('en-GB')}</span>
+                  <span className="text-[10px] text-gray-500">{ob.date ? new Date(ob.date).toLocaleDateString('en-GB') : '—'}</span>
                 </div>
                 <p className="text-xs text-white mb-1">{ob.clientName || 'عميل غير محدد'}</p>
                 <p className="text-[10px] text-gray-500 mb-2">{ob.carType || ''}</p>
                 <div className="flex items-center justify-between text-[10px]">
                   <Badge className="bg-[#FF9100]/15 text-[#FF9100] border-[#FF9100]/30 text-[10px] px-1.5 py-0">
-                    {ob.totalMeters.toFixed(1)} م
+                    {(ob.totalMeters || 0).toFixed(1)} م
                   </Badge>
-                  <span className="text-gray-500">{ob.rollsCount} رولات</span>
+                  <span className="text-gray-500">{ob.rollsCount || ob.rolls?.length || 0} رولات</span>
                 </div>
               </div>
             ))}
@@ -824,10 +824,10 @@ function OBListDialog({ open, onOpenChange, obGroups }: {
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       <span className="font-mono font-bold text-[#03DAC6]">{ob.workOrder}</span>
-                      <span className="text-[10px] text-gray-500">{new Date(ob.date).toLocaleDateString('en-GB')}</span>
+                      <span className="text-[10px] text-gray-500">{ob.date ? new Date(ob.date).toLocaleDateString('en-GB') : '—'}</span>
                     </div>
                     <Badge className="bg-[#FF9100]/15 text-[#FF9100] border-[#FF9100]/30 text-xs">
-                      {ob.totalMeters.toFixed(1)} متر
+                      {(ob.totalMeters || 0).toFixed(1)} متر
                     </Badge>
                   </div>
                   <div className="grid grid-cols-2 gap-3 text-sm">
@@ -841,7 +841,7 @@ function OBListDialog({ open, onOpenChange, obGroups }: {
                     </div>
                   </div>
                   <div className="mt-3 pt-3 border-t border-white/5">
-                    <p className="text-xs text-gray-500 mb-2">الرولات المستهلكة ({ob.rollsCount}):</p>
+                    <p className="text-xs text-gray-500 mb-2">الرولات المستهلكة ({ob.rollsCount || ob.rolls?.length || 0}):</p>
                     <div className="space-y-1">
                       {ob.rolls.map((r, i) => (
                         <div key={i} className="flex items-center justify-between text-xs bg-white/3 rounded p-2">

@@ -396,10 +396,12 @@ export async function GET(req: NextRequest) {
           carType: c.carType,
           date: c.date,
           totalMeters: 0,
+          rollsCount: 0,
           rolls: [],
         }
       }
       obGroups[c.workOrder].totalMeters += c.metersUsed || 0
+      obGroups[c.workOrder].rollsCount += 1
       obGroups[c.workOrder].rolls.push({
         rollCode: c.rollCode,
         metersUsed: c.metersUsed,
