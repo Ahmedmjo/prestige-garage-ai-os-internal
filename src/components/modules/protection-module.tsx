@@ -87,6 +87,11 @@ export function ProtectionModule() {
   useEffect(() => {
     loadData()
     loadThresholds()
+    // Listen for global data-changed events (e.g. when AI assistant executes a tool)
+    // so this module refreshes its rolls list to reflect balance/status changes.
+    const handler = () => loadData()
+    window.addEventListener('prestige-data-changed', handler)
+    return () => window.removeEventListener('prestige-data-changed', handler)
   }, [])
 
   async function loadData() {

@@ -100,6 +100,11 @@ export function RollsModule() {
 
   useEffect(() => {
     loadRolls()
+    // Listen for global data-changed events (e.g. when AI assistant executes a tool)
+    // so this module refreshes its rolls list to reflect balance/status changes.
+    const handler = () => loadRolls()
+    window.addEventListener('prestige-data-changed', handler)
+    return () => window.removeEventListener('prestige-data-changed', handler)
   }, [])
 
   async function loadRolls() {

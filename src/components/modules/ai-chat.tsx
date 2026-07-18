@@ -195,8 +195,16 @@ export function AIChat({ onClose }: AIChatProps) {
       })
       const data = await res.json()
       appendAssistantMessage(data.reply || (data.success ? 'تم بنجاح ✅' : 'حدث خطأ ❌'))
-      if (data.success) toast.success('تم التنفيذ بنجاح')
-      else toast.error(data.reply || 'فشل التنفيذ')
+      if (data.success) {
+        toast.success('تم التنفيذ بنجاح')
+        // Broadcast a global refresh event so all modules (rolls, protection, stock, etc.)
+        // reload their data from DB to reflect the changes (status updates, balance changes, etc.)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('prestige-data-changed'))
+        }
+      } else {
+        toast.error(data.reply || 'فشل التنفيذ')
+      }
     } catch (e: any) {
       appendAssistantMessage('❌ تعذر الاتصال بالخادم لتنفيذ العملية.')
       toast.error(e.message)

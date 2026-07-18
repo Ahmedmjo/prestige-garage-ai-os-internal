@@ -59,6 +59,13 @@ export function StockModule() {
     loadItems()
   }, [category])
 
+  // Listen for global data-changed events (e.g. when AI assistant executes a tool)
+  useEffect(() => {
+    const handler = () => loadItems()
+    window.addEventListener('prestige-data-changed', handler)
+    return () => window.removeEventListener('prestige-data-changed', handler)
+  }, [])
+
   async function loadItems() {
     setLoading(true)
     try {
