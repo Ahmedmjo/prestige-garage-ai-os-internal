@@ -638,6 +638,14 @@ ARGS: {"employeeName":"أحمد السيد","date":"2026-07-05","status":"ح"}
   TOOL: roll_consumption
   ARGS: {"rollCode":"3M-SG-004","metersUsed":0,"waste":1.5}
 
+#### أ.2 تسجيل هالك لعدة رولات دفعة واحدة:
+- "سجل هالك لكل الرولات أقل من 2 متر" → استدعِ batch_waste بقائمة items
+- كل عنصر في items = { rollCode, waste }
+- مثال: "سجل هالك لكل الرولات أقل من 2 متر بـ OB-0050"
+  TOOL: batch_waste
+  ARGS: {"items":[{"rollCode":"3M-SG-001","waste":1.5},{"rollCode":"3M-SG-005","waste":2}],"workOrder":"OB-0050"}
+- استخدم batch_waste فقط عندما المستخدم يطلب عدة رولات مرة واحدة.
+
 #### ب. الفرق بين add_roll و roll_consumption:
 - **add_roll**: لما تيجيب رول جديد من المورد (لفة كاملة جديدة) → بتضيفه للمخزون.
 - **roll_consumption**: لما تسحب/تستهلك/تهالك من رول موجود → بتخصم من رصيده.
@@ -791,6 +799,7 @@ const TOOL_TABLE_MAP: Record<string, string> = {
   create_service: 'services', add_employee: 'employees', record_attendance: 'attendance', batch_attendance: 'attendance',
   record_advance: 'advances', record_penalty: 'penalties', add_stock_item: 'stock_items',
   stock_movement: 'stock_movements', add_roll: 'rolls', roll_consumption: 'roll_consumptions',
+  batch_waste: 'roll_consumptions',
   create_customer: 'customers', create_supplier: 'suppliers', create_offer: 'offers',
   create_stock_invoice: 'stock_invoices', delete_service: 'services', delete_stock_item: 'stock_items',
   pay_salary: 'payroll_payments',

@@ -220,6 +220,33 @@ export const AI_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'batch_waste',
+      description: 'تسجيل هالك (بواقي/هدر) لعدة رولات دفعة واحدة. استخدم هذه الأداة عندما يطلب المستخدم "سجل هالك لكل الرولات أقل من X متر" أو "سجل البواقي". كل عنصر في المصفوفة يمثل رول واحد بقيمة الهالك الخاصة به. يخصم من رصيد كل رول تلقائياً.',
+      parameters: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            description: 'قائمة الرولات وقيم الهالك لكل رول',
+            items: {
+              type: 'object',
+              properties: {
+                rollCode: { type: 'string', description: 'كود الرول' },
+                waste: { type: 'number', description: 'قيمة الهالك بالمتر' },
+              },
+              required: ['rollCode', 'waste'],
+            },
+          },
+          workOrder: { type: 'string', description: 'رقم أمر الشغل (OB) واحد لكل الرولات (اختياري)' },
+          notes: { type: 'string', description: 'ملاحظات عامة (اختياري)' },
+        },
+        required: ['items'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'create_customer',
       description: 'إضافة عميل جديد بشكل مستقل إلى قاعدة العملاء (بدون خدمة مرتبطة به الآن).',
       parameters: {
@@ -396,6 +423,17 @@ export function summarizeToolCall(name: string, args: any): string {
       if (args.technician) parts.push(`• الفني: ${args.technician}`)
       if (args.transactionType && args.transactionType !== 'استهلاك') parts.push(`• نوع الحركة: ${args.transactionType}`)
       parts.push('هل أؤكد السحب؟')
+      return parts.join('\n')
+    }
+    case 'batch_waste': {
+      const items = Array.isArray(args.items) ? args.items : []
+      const lines = items.map((it: any, i: number) => `${i + 1}. ${it.rollCode} — هالك ${num(it.waste)}م`)
+      const parts: string[] = [
+        `🎞️ تسجيل هالك لـ ${items.length} رول:`,
+        ...lines,
+      ]
+      if (args.workOrder) parts.push(`• أمر الشغل: ${args.workOrder}`)
+      parts.push('هل أؤكد تسجيل الهالك للكل؟')
       return parts.join('\n')
     }
     case 'create_customer':
@@ -749,6 +787,65 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
         }
         const obSuffix = args.workOrder ? ` (OB: ${args.workOrder})` : ''
         return { success: true, message: `✅ تم تسجيل سحب ${metersUsed}م من الرول ${roll.code}${obSuffix}. المتبقي: ${newRemaining.toFixed(2)}م.`, data: consumption }
+      }
+
+      case 'batch_waste': {
+        const items = Array.isArray(args.items) ? args.items : []
+        if (items.length === 0) {
+          return { success: false, message: '❌ قائمة الرولات فارغة.' }
+        }
+        const workOrder = args.workOrder || null
+        const results: string[] = []
+        const errors: string[] = []
+        for (const item of items) {
+          const roll = await findRollByCode(item.rollCode)
+          if (!roll) {
+            errors.push(`${item.rollCode}: غير موجود`)
+            continue
+          }
+          const waste = Number(item.waste) || 0
+          if (waste <= 0) {
+            errors.push(`${roll.code}: قيمة الهالك غير صحيحة`)
+            continue
+          }
+          if (waste > (roll.remainingLength || 0)) {
+            errors.push(`${roll.code}: الرصيد غير كافٍ (متبقي ${roll.remainingLength}م، مطلوب ${waste}م)`)
+            continue
+          }
+          const consumption = await db.rollConsumption.create({
+            data: {
+              rollId: roll.id, rollCode: roll.code, date: new Date(),
+              metersUsed: 0, waste,
+              workOrder,
+              notes: args.notes || 'تسجيل هالك دفعة',
+              transactionType: 'هالك',
+            },
+          })
+          const newRemaining = (roll.remainingLength || 0) - waste
+          let newStatus = 'active'
+          if (newRemaining <= 0) newStatus = 'finished'
+          else if (newRemaining <= 2) newStatus = 'low'
+          await db.roll.update({
+            where: { id: roll.id },
+            data: { remainingLength: newRemaining, status: newStatus },
+          })
+          if (newStatus !== 'active' && roll.status === 'active') {
+            await db.alert.create({
+              data: {
+                type: 'roll_low', severity: newStatus === 'finished' ? 'critical' : 'warning',
+                title: `رول ${roll.code} ${newStatus === 'finished' ? 'منتهي' : 'أوشك على النفاذ'}`,
+                message: `الرول ${roll.brand} ${roll.type} (${roll.code}) — المتبقي ${newRemaining.toFixed(2)} متر`,
+                relatedId: roll.id, relatedType: 'roll',
+              },
+            })
+          }
+          results.push(`${roll.code}: ${waste}م (متبقي ${newRemaining.toFixed(2)}م)`)
+        }
+        let msg = `✅ تم تسجيل الهالك لـ ${results.length} رول:\n` + results.map(r => `• ${r}`).join('\n')
+        if (errors.length > 0) {
+          msg += `\n\n⚠️ ${errors.length} رول لم يُسجل:\n` + errors.map(e => `• ${e}`).join('\n')
+        }
+        return { success: results.length > 0, message: msg, data: { registered: results.length, errors: errors.length } }
       }
 
       case 'create_customer': {
