@@ -429,26 +429,30 @@ export function summarizeToolCall(name: string, args: any): string {
     case 'batch_waste': {
       const items = Array.isArray(args.items) ? args.items : []
       const startOB = args.startWorkOrder as string | undefined
-      // Parse the starting OB number for sequential display
-      let obNum: number | null = null
+      // Parse the starting OBX number for sequential display
+      let obxNum: number | null = null
       if (startOB) {
-        const m = startOB.match(/OB[-\s]*(\d+)/i)
-        if (m) obNum = parseInt(m[1], 10)
+        const m = startOB.match(/OBX[-\s]*(\d+)/i)
+        if (m) obxNum = parseInt(m[1], 10)
+        else {
+          const m2 = startOB.match(/OB[-\s]*(\d+)/i)
+          if (m2) obxNum = parseInt(m2[1], 10)
+        }
       }
       const lines = items.map((it: any, i: number) => {
-        const obLabel = obNum !== null
-          ? `OB-${String(obNum + i).padStart(4, '0')}`
-          : (args.workOrder || '—')
-        return `${i + 1}. ${it.rollCode} — هالك ${num(it.waste)}م — ${obLabel}`
+        const obxLabel = obxNum !== null
+          ? `OBX${obxNum + i}`
+          : (args.workOrder || 'OBX تلقائي')
+        return `${i + 1}. ${it.rollCode} — هالك ${num(it.waste)}م — ${obxLabel}`
       })
       const parts: string[] = [
         `🎞️ تسجيل هالك لـ ${items.length} رول:`,
         ...lines,
       ]
-      if (obNum !== null) {
-        parts.push(`• كل رول OB مستقل (من ${startOB} إلى OB-${String(obNum + items.length - 1).padStart(4, '0')})`)
-      } else if (args.workOrder) {
-        parts.push(`• أمر الشغل: ${args.workOrder}`)
+      if (obxNum !== null) {
+        parts.push(`• كل رول OBX مستقل (من OBX${obxNum} إلى OBX${obxNum + items.length - 1})`)
+      } else {
+        parts.push(`• ترقيم OBX تلقائي متسلسل لكل رول`)
       }
       parts.push('هل أؤكد تسجيل الهالك للكل؟')
       return parts.join('\n')
@@ -772,15 +776,33 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
         if (totalUsed > (roll.remainingLength || 0)) {
           return { success: false, message: `❌ الرصيد غير كافٍ. المتبقي ${roll.remainingLength}م، المطلوب ${totalUsed}م.` }
         }
+        // ─── OBX numbering for waste-only operations ───
+        // If this is a waste-only operation (metersUsed=0, waste>0) and no workOrder
+        // was provided, auto-generate the next OBX number.
+        let finalWorkOrder = args.workOrder || null
+        let isWasteOnly = metersUsed === 0 && waste > 0
+        if (isWasteOnly && !finalWorkOrder) {
+          // Auto-generate next OBX
+          const allWasteCons = await db.rollConsumption.findMany({
+            where: { workOrder: { startsWith: 'OBX' } },
+            select: { workOrder: true },
+          })
+          let maxObxNum = 0
+          for (const w of allWasteCons) {
+            const m = (w.workOrder || '').match(/OBX[-\s]*(\d+)/i)
+            if (m) { const n = parseInt(m[1], 10); if (n > maxObxNum) maxObxNum = n }
+          }
+          finalWorkOrder = `OBX${maxObxNum + 1}`
+        }
         const consumption = await db.rollConsumption.create({
           data: {
             rollId: roll.id, rollCode: roll.code, date: new Date(),
             clientName: args.clientName || null, carType: args.carType || null,
             plateNumber: args.plateNumber || null, metersUsed, waste,
-            usageArea: args.usageArea || null, workOrder: args.workOrder || null,
+            usageArea: args.usageArea || null, workOrder: finalWorkOrder,
             notes: args.notes || null,
             technician: args.technician || null,
-            transactionType: args.transactionType || 'استهلاك',
+            transactionType: isWasteOnly ? 'هالك' : (args.transactionType || 'استهلاك'),
           },
         })
         const newRemaining = (roll.remainingLength || 0) - totalUsed
@@ -802,8 +824,9 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
             },
           })
         }
-        const obSuffix = args.workOrder ? ` (OB: ${args.workOrder})` : ''
-        return { success: true, message: `✅ تم تسجيل سحب ${metersUsed}م من الرول ${roll.code}${obSuffix}. المتبقي: ${newRemaining.toFixed(2)}م.`, data: consumption }
+        const obSuffix = finalWorkOrder ? ` (${finalWorkOrder})` : ''
+        const opLabel = isWasteOnly ? `هالك ${waste}م` : `سحب ${metersUsed}م`
+        return { success: true, message: `✅ تم تسجيل ${opLabel} من الرول ${roll.code}${obSuffix}. المتبقي: ${newRemaining.toFixed(2)}م.`, data: consumption }
       }
 
       case 'batch_waste': {
@@ -811,21 +834,39 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
         if (items.length === 0) {
           return { success: false, message: '❌ قائمة الرولات فارغة.' }
         }
-        const workOrder = args.workOrder || null
-        // If startWorkOrder is provided, each roll gets a sequential OB
-        let startObNum: number | null = null
+        // ─── OBX numbering for waste operations ───
+        // Waste uses a separate sequence: OBX1, OBX2, OBX3...
+        // (distinct from regular OB-XXXX consumption numbers)
+        // Each roll gets its own sequential OBX number.
+        const allWasteCons = await db.rollConsumption.findMany({
+          where: { workOrder: { startsWith: 'OBX' } },
+          select: { workOrder: true },
+        })
+        let maxObxNum = 0
+        for (const w of allWasteCons) {
+          const m = (w.workOrder || '').match(/OBX[-\s]*(\d+)/i)
+          if (m) {
+            const n = parseInt(m[1], 10)
+            if (n > maxObxNum) maxObxNum = n
+          }
+        }
+        // If user provided a startWorkOrder, use that as the starting OBX number
+        let startObxNum = maxObxNum + 1
         if (args.startWorkOrder) {
-          const m = String(args.startWorkOrder).match(/OB[-\s]*(\d+)/i)
-          if (m) startObNum = parseInt(m[1], 10)
+          const m = String(args.startWorkOrder).match(/OBX[-\s]*(\d+)/i)
+          if (m) startObxNum = parseInt(m[1], 10)
+          else {
+            // Try OB format → convert to OBX
+            const m2 = String(args.startWorkOrder).match(/OB[-\s]*(\d+)/i)
+            if (m2) startObxNum = parseInt(m2[1], 10)
+          }
         }
         const results: string[] = []
         const errors: string[] = []
         for (let idx = 0; idx < items.length; idx++) {
           const item = items[idx]
-          // Assign per-roll OB if startWorkOrder is set, otherwise use shared workOrder
-          const perRollOB = startObNum !== null
-            ? `OB-${String(startObNum + idx).padStart(4, '0')}`
-            : workOrder
+          // Each roll gets a sequential OBX number
+          const perRollOBX = `OBX${startObxNum + idx}`
           const roll = await findRollByCode(item.rollCode)
           if (!roll) {
             errors.push(`${item.rollCode}: غير موجود`)
@@ -844,8 +885,8 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
             data: {
               rollId: roll.id, rollCode: roll.code, date: new Date(),
               metersUsed: 0, waste,
-              workOrder: perRollOB,
-              notes: args.notes || 'تسجيل هالك دفعة',
+              workOrder: perRollOBX,
+              notes: args.notes || 'تسجيل هالك',
               transactionType: 'هالك',
             },
           })
@@ -867,7 +908,7 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
               },
             })
           }
-          results.push(`${roll.code}: ${waste}م — ${perRollOB || 'بدون OB'} (متبقي ${newRemaining.toFixed(2)}م)`)
+          results.push(`${roll.code}: ${waste}م — ${perRollOBX} (متبقي ${newRemaining.toFixed(2)}م)`)
         }
         let msg = `✅ تم تسجيل الهالك لـ ${results.length} رول:\n` + results.map(r => `• ${r}`).join('\n')
         if (errors.length > 0) {

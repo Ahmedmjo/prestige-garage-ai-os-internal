@@ -84,6 +84,20 @@ async function generateNextOB(): Promise<string> {
   return `OB-${String(nextNum).padStart(4, '0')}`
 }
 
+// Generate next OBX number (for waste operations)
+async function generateNextOBX(): Promise<string> {
+  const allWasteCons = await db.rollConsumption.findMany({
+    where: { workOrder: { startsWith: 'OBX' } },
+    select: { workOrder: true },
+  })
+  let maxNum = 0
+  for (const w of allWasteCons) {
+    const m = (w.workOrder || '').match(/OBX[-\s]*(\d+)/i)
+    if (m) { const n = parseInt(m[1], 10); if (n > maxNum) maxNum = n }
+  }
+  return `OBX${maxNum + 1}`
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body: ActionRequest = await req.json()
@@ -110,6 +124,7 @@ export async function POST(req: NextRequest) {
 
       case 'next_ob': {
         const nextOB = await generateNextOB()
+    const nextOBX = await generateNextOBX()
         // Also return last few OBs for context
         const recentOBs = await db.rollConsumption.findMany({
           where: { workOrder: { startsWith: 'OB-' } },
@@ -119,6 +134,7 @@ export async function POST(req: NextRequest) {
         })
         return NextResponse.json({
           nextOB,
+      nextOBX,
           recentOBs: recentOBs.map(c => ({
             workOrder: c.workOrder,
             clientName: c.clientName,

@@ -70,6 +70,7 @@ export function ProtectionModule() {
   const [rolls, setRolls] = useState<Roll[]>([])
   const [obGroups, setObGroups] = useState<OBGroup[]>([])
   const [nextOB, setNextOB] = useState('OB-0001')
+  const [nextOBX, setNextOBX] = useState('OBX1')
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -106,6 +107,7 @@ export function ProtectionModule() {
       setRolls(rollsData)
       setObGroups(obData.recentOBs || [])
       setNextOB(obData.nextOB || 'OB-0001')
+      setNextOBX(obData.nextOBX || 'OBX1')
     } catch (e) {
       toast.error('فشل تحميل البيانات')
     } finally {
@@ -318,6 +320,27 @@ export function ProtectionModule() {
             </Button>
           )}
         </div>
+      </div>
+
+      {/* Waste (OBX) banner — separate numbering for waste operations */}
+      <div className="bg-gradient-to-r from-[#FF9100]/15 via-[#FF9100]/5 to-transparent border border-[#FF9100]/20 rounded-lg p-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full bg-[#FF9100]/20 flex items-center justify-center">
+            <AlertTriangle size={20} className="text-[#FF9100]" />
+          </div>
+          <div>
+            <p className="text-xs text-gray-400">رقم الهالك التالي</p>
+            <p className="text-xl font-bold text-white font-mono">{nextOBX}</p>
+          </div>
+        </div>
+        <Button
+          onClick={() => setShowConsumptionDialog(true)}
+          className="bg-[#FF9100] hover:bg-[#FF9100]/80 text-white border-0"
+          title="تسجيل هالك (بواقي/هدر) — نظام OBX منفصل"
+        >
+          <AlertTriangle size={16} className="ml-1" />
+          تسجيل هالك بـ {nextOBX}
+        </Button>
       </div>
 
       {/* Filters */}
