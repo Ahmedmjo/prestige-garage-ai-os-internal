@@ -378,6 +378,7 @@ export async function GET(req: NextRequest) {
 
     // Default: return next OB and recent OBs
     const nextOB = await generateNextOB()
+    const nextOBX = await generateNextOBX()
     const recentConsumptions = await db.rollConsumption.findMany({
       where: { workOrder: { startsWith: 'OB-' } },
       orderBy: { date: 'desc' },
@@ -409,6 +410,7 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       nextOB,
+      nextOBX,
       recentOBs: Object.values(obGroups).slice(0, 5),
     })
   } catch (e: any) {
