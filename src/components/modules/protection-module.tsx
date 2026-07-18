@@ -532,7 +532,6 @@ function AddRollDialog({ open, onOpenChange, onSuccess }: {
   onSuccess: () => void
 }) {
   const { t, lang } = useI18n()
-  const isWasteMode = mode === 'waste'
   const [form, setForm] = useState({
     code: '', brand: '', type: '', model: '', width: '', totalLength: '',
     price: '', supplier: '', purchaseDate: '', notes: '',
