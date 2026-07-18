@@ -613,14 +613,47 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
   // Computes the next sequence for the brand+type prefix from existing rolls.
   // Auto-fills the code field (editable — user can change the sequence number).
   // Triggered from brand/type/category onChange (not useEffect) to avoid cascading renders.
+  // ─── Smart code suggestion (preserves existing patterns) ───
+  // 1. Brand prefix: first 3 chars of brand (3M→3M, Hexis→HXS, Scotchgard→SCO)
+  // 2. Type prefix: looks up existing rolls with SAME brand+type, extracts their
+  //    type-prefix from the code (e.g. 3M-SG-003 + type="TPU SG 7.5" → "SG")
+  //    Falls back to type.slice(0,3) for genuinely new types.
+  // 3. Sequence: max existing sequence for that brand+type-prefix + 1
   function computeSuggestedCode(brand: string, type: string): string {
     const bp = brand.slice(0, 3).toUpperCase()
-    const tp = type.slice(0, 3).toUpperCase()
-    if (!bp || !tp) return ''
-    const re = new RegExp(`^${bp}-${tp}-(\\d+)$`, 'i')
+    if (!bp || !type) return ''
+
+    // Find existing rolls with the same brand (case-insensitive)
+    const sameBrandRolls = existingRolls.filter(r =>
+      (r.brand || '').toLowerCase().trim() === brand.toLowerCase().trim()
+    )
+
+    // Try to find the type-prefix from an existing roll with the same type
+    let tp = ''
+    for (const r of sameBrandRolls) {
+      if ((r.type || '').toLowerCase().trim() === type.toLowerCase().trim()) {
+        // Extract the middle segment (type-prefix) from the code: BRAND-TP-SEQ
+        const parts = (r.code || '').toUpperCase().split('-')
+        if (parts.length >= 3) {
+          // type-prefix = everything between first and last hyphen
+          tp = parts.slice(1, -1).join('-')
+          break
+        }
+      }
+    }
+
+    // Fallback: if no existing roll has this exact type, use slice(0,3)
+    if (!tp) {
+      tp = type.slice(0, 3).toUpperCase()
+    }
+
+    // Find max sequence for this brand+type-prefix combination
+    // Escape special regex chars in tp (e.g. "8.5" → "8\\.5")
+    const escapedTp = tp.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const seqRe = new RegExp(`^${bp}-${escapedTp}-(\\d+)$`, 'i')
     let max = 0
     for (const r of existingRolls) {
-      const m = (r.code || '').match(re)
+      const m = (r.code || '').match(seqRe)
       if (m) { const n = parseInt(m[1], 10); if (n > max) max = n }
     }
     return `${bp}-${tp}-${String(max + 1).padStart(3, '0')}`
@@ -714,8 +747,20 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
               <option value="thermal_short">{lang === 'ar' ? 'عزل قصير' : 'Thermal Short'}</option>
             </select>
           </div>
-          <Field label={`${lang === 'ar' ? 'الماركة' : 'Brand'} *`} value={form.brand} onChange={v => setForm(prev => ({ ...prev, brand: v, code: computeSuggestedCode(v, prev.type) || prev.code }))} placeholder="Hexis" />
-          <Field label={`${lang === 'ar' ? 'النوع' : 'Type'} *`} value={form.type} onChange={v => setForm(prev => ({ ...prev, type: v, code: computeSuggestedCode(prev.brand, v) || prev.code }))} placeholder="Body Fence" />
+          <Field label={`${lang === 'ar' ? 'الماركة' : 'Brand'} *`} value={form.brand} onChange={v => setForm(prev => ({ ...prev, brand: v, code: computeSuggestedCode(v, prev.type) || prev.code }))} placeholder="Hexis" list="roll-brands-list" />
+          {/* Datalist: existing brands for consistent naming */}
+          <datalist id="roll-brands-list">
+            {[...new Set(existingRolls.map(r => r.brand).filter(Boolean))].map(b => (
+              <option key={b} value={b} />
+            ))}
+          </datalist>
+          <Field label={`${lang === 'ar' ? 'النوع' : 'Type'} *`} value={form.type} onChange={v => setForm(prev => ({ ...prev, type: v, code: computeSuggestedCode(prev.brand, v) || prev.code }))} placeholder="Body Fence" list="roll-types-list" />
+          {/* Datalist: existing types for the selected brand */}
+          <datalist id="roll-types-list">
+            {[...new Set(existingRolls.filter(r => (r.brand||'').toLowerCase().trim() === form.brand.toLowerCase().trim()).map(r => r.type).filter(Boolean))].map(t => (
+              <option key={t} value={t} />
+            ))}
+          </datalist>
           <Field label={lang === 'ar' ? 'الموديل' : 'Model'} value={form.model} onChange={v => setForm({ ...form, model: v })} placeholder="Glossy" />
           <Field label={`${lang === 'ar' ? 'العرض (م)' : 'Width (m)'}`} value={form.width} onChange={v => setForm({ ...form, width: v })} placeholder="1.52" type="number" />
           <Field label={`${lang === 'ar' ? 'الطول الإجمالي (م)' : 'Total Length (m)'} *`} value={form.totalLength} onChange={v => setForm({ ...form, totalLength: v })} placeholder="15" type="number" />
@@ -1236,12 +1281,13 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, onSucce
 }
 
 // ─── Field helper ────────────────────────────────────
-function Field({ label, value, onChange, placeholder, type = 'text' }: {
+function Field({ label, value, onChange, placeholder, type = 'text', list }: {
   label: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
   type?: string
+  list?: string
 }) {
   return (
     <div>
@@ -1251,6 +1297,7 @@ function Field({ label, value, onChange, placeholder, type = 'text' }: {
         value={value}
         onChange={e => onChange(e.target.value)}
         placeholder={placeholder}
+        list={list}
         className="bg-[#000] border-white/10 text-white mt-1 placeholder:text-gray-600"
       />
     </div>
