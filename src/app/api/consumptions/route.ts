@@ -16,9 +16,10 @@ function normalizeOB(workOrder: string | null | undefined): string | null {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const roll = await db.roll.findUnique({ where: { code: body.rollCode } })
+    const rollCode = (body.rollCode || '').trim()
+    const roll = await db.roll.findUnique({ where: { code: rollCode } })
     if (!roll) {
-      return NextResponse.json({ error: 'كود الرول غير موجود' }, { status: 404 })
+      return NextResponse.json({ error: `كود الرول ${rollCode} غير موجود` }, { status: 404 })
     }
 
     const metersUsed = Number(body.metersUsed) || 0

@@ -14,17 +14,20 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
     // If roll code is being changed, validate the new roll exists
     let newRoll = null
-    if (body.rollCode && body.rollCode !== existing.rollCode) {
-      newRoll = await db.roll.findUnique({ where: { code: body.rollCode } })
+    const bodyRollCode = (body.rollCode || '').trim()
+    if (bodyRollCode && bodyRollCode !== existing.rollCode) {
+      newRoll = await db.roll.findUnique({ where: { code: bodyRollCode } })
       if (!newRoll) {
-        return NextResponse.json({ error: `كود الرول ${body.rollCode} غير موجود` }, { status: 404 })
+        return NextResponse.json({ error: `كود الرول ${bodyRollCode} غير موجود` }, { status: 404 })
       }
     }
+
+    // Calculate old used amount (before restore, so it's available for validation)
+    const oldUsed = (existing.metersUsed || 0) + (existing.waste || 0)
 
     // First, restore the previous roll's remaining length
     const oldRoll = await db.roll.findUnique({ where: { code: existing.rollCode } })
     if (oldRoll) {
-      const oldUsed = (existing.metersUsed || 0) + (existing.waste || 0)
       await db.roll.update({
         where: { id: oldRoll.id },
         data: {
@@ -38,15 +41,17 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const totalUsed = metersUsed + waste
 
     // Determine which roll to deduct from
-    const targetRollCode = body.rollCode || existing.rollCode
+    const targetRollCode = bodyRollCode || existing.rollCode
     const targetRoll = newRoll || oldRoll
     if (!targetRoll) {
       return NextResponse.json({ error: 'الرول غير موجود' }, { status: 404 })
     }
 
     // Check if the target roll has enough remaining
+    // If same roll: add oldUsed back (already restored above) before checking
+    // If different roll: use its current remaining
     const availableAfterRestore = targetRoll.code === existing.rollCode
-      ? (targetRoll.remainingLength || 0)  // already restored above
+      ? (targetRoll.remainingLength || 0) + oldUsed  // restored value
       : (targetRoll.remainingLength || 0)
 
     if (totalUsed > availableAfterRestore) {

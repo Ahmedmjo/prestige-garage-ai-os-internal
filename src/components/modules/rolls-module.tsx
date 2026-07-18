@@ -747,20 +747,66 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
               <option value="thermal_short">{lang === 'ar' ? 'عزل قصير' : 'Thermal Short'}</option>
             </select>
           </div>
-          <Field label={`${lang === 'ar' ? 'الماركة' : 'Brand'} *`} value={form.brand} onChange={v => setForm(prev => ({ ...prev, brand: v, code: computeSuggestedCode(v, prev.type) || prev.code }))} placeholder="Hexis" list="roll-brands-list" />
-          {/* Datalist: existing brands for consistent naming */}
-          <datalist id="roll-brands-list">
-            {[...new Set(existingRolls.map(r => r.brand).filter(Boolean))].map(b => (
-              <option key={b} value={b} />
-            ))}
-          </datalist>
-          <Field label={`${lang === 'ar' ? 'النوع' : 'Type'} *`} value={form.type} onChange={v => setForm(prev => ({ ...prev, type: v, code: computeSuggestedCode(prev.brand, v) || prev.code }))} placeholder="Body Fence" list="roll-types-list" />
-          {/* Datalist: existing types for the selected brand */}
-          <datalist id="roll-types-list">
-            {[...new Set(existingRolls.filter(r => (r.brand||'').toLowerCase().trim() === form.brand.toLowerCase().trim()).map(r => r.type).filter(Boolean))].map(t => (
-              <option key={t} value={t} />
-            ))}
-          </datalist>
+          {/* Brand: select dropdown with existing brands + "other" option */}
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'الماركة *' : 'Brand *'}</Label>
+            <select
+              value={form.brand}
+              onChange={e => {
+                const v = e.target.value
+                setForm(prev => ({ ...prev, brand: v, code: computeSuggestedCode(v, prev.type) || prev.code }))
+              }}
+              className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-1"
+            >
+              <option value="">— اختر الماركة —</option>
+              {[...new Set(existingRolls.map(r => r.brand).filter(Boolean))].sort().map(b => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+              <option value="__other__">{lang === 'ar' ? '✏️ ماركة جديدة...' : '✏️ Other...'}</option>
+            </select>
+            {form.brand === '__other__' && (
+              <Input
+                value=""
+                onChange={e => setForm(prev => ({ ...prev, brand: e.target.value, code: computeSuggestedCode(e.target.value, prev.type) || prev.code }))}
+                placeholder={lang === 'ar' ? 'اكتب اسم الماركة الجديدة' : 'Type new brand name'}
+                className="bg-[#000] border-white/10 text-white mt-1"
+                autoFocus
+              />
+            )}
+          </div>
+          {/* Type: select dropdown filtered by selected brand + "other" option */}
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'النوع *' : 'Type *'}</Label>
+            <select
+              value={form.type}
+              onChange={e => {
+                const v = e.target.value
+                setForm(prev => ({ ...prev, type: v, code: computeSuggestedCode(prev.brand, v) || prev.code }))
+              }}
+              className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-1"
+              disabled={!form.brand || form.brand === '__other__'}
+            >
+              <option value="">— اختر النوع —</option>
+              {[...new Set(
+                existingRolls
+                  .filter(r => (r.brand || '').toLowerCase().trim() === (form.brand || '').toLowerCase().trim())
+                  .map(r => r.type)
+                  .filter(Boolean)
+              )].sort().map(t => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+              <option value="__other__">{lang === 'ar' ? '✏️ نوع جديد...' : '✏️ Other...'}</option>
+            </select>
+            {form.type === '__other__' && (
+              <Input
+                value=""
+                onChange={e => setForm(prev => ({ ...prev, type: e.target.value, code: computeSuggestedCode(prev.brand, e.target.value) || prev.code }))}
+                placeholder={lang === 'ar' ? 'اكتب اسم النوع الجديد' : 'Type new type name'}
+                className="bg-[#000] border-white/10 text-white mt-1"
+                autoFocus
+              />
+            )}
+          </div>
           <Field label={lang === 'ar' ? 'الموديل' : 'Model'} value={form.model} onChange={v => setForm({ ...form, model: v })} placeholder="Glossy" />
           <Field label={`${lang === 'ar' ? 'العرض (م)' : 'Width (m)'}`} value={form.width} onChange={v => setForm({ ...form, width: v })} placeholder="1.52" type="number" />
           <Field label={`${lang === 'ar' ? 'الطول الإجمالي (م)' : 'Total Length (m)'} *`} value={form.totalLength} onChange={v => setForm({ ...form, totalLength: v })} placeholder="15" type="number" />
