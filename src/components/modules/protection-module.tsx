@@ -77,6 +77,7 @@ export function ProtectionModule() {
   const [thresholds, setThresholds] = useState(DEFAULT_THRESHOLDS)
   const [showAddDialog, setShowAddDialog] = useState(false)
   const [showConsumptionDialog, setShowConsumptionDialog] = useState(false)
+  const [dialogMode, setDialogMode] = useState<'consumption' | 'waste'>('consumption')
   const [selectedRoll, setSelectedRoll] = useState<Roll | null>(null)
   const [showOBList, setShowOBList] = useState(false)
   // يخزّن آخر عملية سحب تم تسجيلها لاستخدامها عند "التكرار" —
@@ -509,7 +510,8 @@ export function ProtectionModule() {
         onOpenChange={setShowConsumptionDialog}
         rolls={rolls}
         preselectedRoll={selectedRoll}
-        defaultOB={nextOB}
+        defaultOB={dialogMode === 'waste' ? nextOBX : nextOB}
+        mode={dialogMode}
         duplicateContext={duplicateContext}
         onConsumptionSaved={(ctx) => setDuplicateContext(ctx)}
         onSuccess={loadData}
@@ -530,6 +532,7 @@ function AddRollDialog({ open, onOpenChange, onSuccess }: {
   onSuccess: () => void
 }) {
   const { t, lang } = useI18n()
+  const isWasteMode = mode === 'waste'
   const [form, setForm] = useState({
     code: '', brand: '', type: '', model: '', width: '', totalLength: '',
     price: '', supplier: '', purchaseDate: '', notes: '',
@@ -637,12 +640,13 @@ function AddRollDialog({ open, onOpenChange, onSuccess }: {
 }
 
 // ─── Consumption Dialog ──────────────────────────────
-function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, defaultOB, duplicateContext, onConsumptionSaved, onSuccess }: {
+function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, defaultOB, mode = 'consumption', duplicateContext, onConsumptionSaved, onSuccess }: {
   open: boolean
   onOpenChange: (v: boolean) => void
   rolls: Roll[]
   preselectedRoll: Roll | null
   defaultOB: string
+  mode?: 'consumption' | 'waste'
   duplicateContext: null | { clientName: string; carType: string; plateNumber: string; workOrder: string }
   onConsumptionSaved: (ctx: { clientName: string; carType: string; plateNumber: string; workOrder: string }) => void
   onSuccess: () => void
@@ -658,7 +662,7 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
   useEffect(() => {
     if (preselectedRoll) {
       setForm(f => ({ ...f, rollCode: preselectedRoll.code, workOrder: defaultOB }))
-    } else if (duplicateContext) {
+    } else if (duplicateContext && !isWasteMode) {
       // "تكرار": نحافظ على نفس العميل/السيارة/OB، ونفرّغ فقط حقول الرول
       setForm(f => ({
         ...f,
@@ -676,24 +680,28 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
 
   async function handleSubmit() {
     if (!form.rollCode || (!form.metersUsed && !form.waste)) {
-      toast.error('كود الرول مطلوب — ضع الأمتار المستخدمة أو الهالك')
+      toast.error(isWasteMode ? 'كود الرول وقيمة الهالك مطلوبة' : 'كود الرول مطلوب — ضع الأمتار المستخدمة أو الهالك')
       return
     }
     setSaving(true)
     try {
+      const payload = isWasteMode
+        ? { ...form, metersUsed: 0, transactionType: 'هالك', clientName: '', carType: '', plateNumber: '' }
+        : form
       const res = await fetch('/api/consumptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const err = await res.json()
         throw new Error(err.error || 'فشل التسجيل')
       }
       const result = await res.json()
-      toast.success(`تم تسجيل استهلاك ${form.metersUsed}م من ${form.rollCode} بأمر الشغل ${form.workOrder}. المتبقي: ${result.newRemaining.toFixed(2)}م`)
+      const opLabel = isWasteMode ? `هالك ${form.waste}م` : `استهلاك ${form.metersUsed}م`
+      toast.success(`تم تسجيل ${opLabel} من ${form.rollCode} — ${form.workOrder}. المتبقي: ${result.newRemaining.toFixed(2)}م`)
       // نخزّن سياق هذه العملية لاستخدامه عند "التكرار" — يتيح إضافة رول آخر لنفس OB/السيارة
-      if (form.clientName || form.carType || form.plateNumber) {
+      if (!isWasteMode && (form.clientName || form.carType || form.plateNumber)) {
         onConsumptionSaved({
           clientName: form.clientName,
           carType: form.carType,
@@ -721,7 +729,7 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-[#0A0A0A] border-white/10 text-white max-w-lg max-h-[90vh] overflow-y-auto" dir="rtl">
         <DialogHeader>
-          <DialogTitle className="text-white">تسجيل استهلاك رول</DialogTitle>
+          <DialogTitle className="text-white">{isWasteMode ? '🗑️ تسجيل هالك (OBX)' : 'تسجيل استهلاك رول'}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 py-2">
           <div className="col-span-2">
@@ -740,24 +748,30 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
             <Input type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
           </div>
           <div>
-            <Label className="text-gray-400 text-xs">رقم أمر الشغل (OB)</Label>
-            <Input value={form.workOrder} onChange={e => setForm({ ...form, workOrder: e.target.value })} placeholder="OB-0001" className="bg-[#000] border-[#00C853]/30 text-white mt-1 font-mono" />
+            <Label className="text-gray-400 text-xs">{isWasteMode ? 'رقم الهالك (OBX)' : 'رقم أمر الشغل (OB)'}</Label>
+            <Input value={form.workOrder} onChange={e => setForm({ ...form, workOrder: e.target.value })} placeholder={isWasteMode ? 'OBX1' : 'OB-0001'} className={`bg-[#000] ${isWasteMode ? 'border-[#FF9100]/40' : 'border-[#00C853]/30'} text-white mt-1 font-mono`} />
           </div>
-          <div>
-            <Label className="text-gray-400 text-xs">اسم العميل</Label>
-            <Input value={form.clientName} onChange={e => setForm({ ...form, clientName: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
-          </div>
-          <div>
-            <Label className="text-gray-400 text-xs">نوع السيارة</Label>
-            <Input value={form.carType} onChange={e => setForm({ ...form, carType: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
-          </div>
-          <div>
-            <Label className="text-gray-400 text-xs">الأمتار المستهلكة (م) *</Label>
-            <Input type="number" value={form.metersUsed} onChange={e => setForm({ ...form, metersUsed: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
-          </div>
-          <div>
-            <Label className="text-gray-400 text-xs">الهالك (م)</Label>
-            <Input type="number" value={form.waste} onChange={e => setForm({ ...form, waste: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+          {!isWasteMode && (
+            <div>
+              <Label className="text-gray-400 text-xs">اسم العميل</Label>
+              <Input value={form.clientName} onChange={e => setForm({ ...form, clientName: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+            </div>
+          )}
+          {!isWasteMode && (
+            <div>
+              <Label className="text-gray-400 text-xs">نوع السيارة</Label>
+              <Input value={form.carType} onChange={e => setForm({ ...form, carType: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+            </div>
+          )}
+          {!isWasteMode && (
+            <div>
+              <Label className="text-gray-400 text-xs">الأمتار المستهلكة (م) *</Label>
+              <Input type="number" value={form.metersUsed} onChange={e => setForm({ ...form, metersUsed: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
+            </div>
+          )}
+          <div className={isWasteMode ? 'col-span-2' : ''}>
+            <Label className="text-gray-400 text-xs">{isWasteMode ? 'قيمة الهالك (م) *' : 'الهالك (م)'}</Label>
+            <Input type="number" value={form.waste} onChange={e => setForm({ ...form, waste: e.target.value })} className={`bg-[#000] ${isWasteMode ? 'border-[#FF9100]/40 text-lg font-bold' : 'border-white/10'} text-white mt-1`} />
           </div>
           <div>
             <Label className="text-gray-400 text-xs">جهة الاستخدام</Label>
