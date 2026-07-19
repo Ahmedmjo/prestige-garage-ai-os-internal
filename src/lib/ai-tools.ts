@@ -773,8 +773,11 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
         const metersUsed = Number(args.metersUsed) || 0
         const waste = Number(args.waste) || 0
         const totalUsed = metersUsed + waste
-        if (totalUsed > (roll.remainingLength || 0)) {
-          return { success: false, message: `❌ الرصيد غير كافٍ. المتبقي ${roll.remainingLength}م، المطلوب ${totalUsed}م.` }
+        // Use rounding to avoid floating-point errors
+        const remaining = Math.round((roll.remainingLength || 0) * 1000) / 1000
+        const used = Math.round(totalUsed * 1000) / 1000
+        if (used > remaining) {
+          return { success: false, message: `❌ الرصيد غير كافٍ. المتبقي ${remaining.toFixed(2)}م، المطلوب ${used.toFixed(2)}م.` }
         }
         // ─── OBX numbering for waste-only operations ───
         // If this is a waste-only operation (metersUsed=0, waste>0) and no workOrder
@@ -805,7 +808,7 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
             transactionType: isWasteOnly ? 'هالك' : (args.transactionType || 'استهلاك'),
           },
         })
-        const newRemaining = (roll.remainingLength || 0) - totalUsed
+        const newRemaining = Math.round((remaining - used) * 1000) / 1000
         let newStatus = 'active'
         if (newRemaining <= 0) newStatus = 'finished'
         else if (newRemaining <= 2) newStatus = 'low'
@@ -877,8 +880,11 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
             errors.push(`${roll.code}: قيمة الهالك غير صحيحة`)
             continue
           }
-          if (waste > (roll.remainingLength || 0)) {
-            errors.push(`${roll.code}: الرصيد غير كافٍ (متبقي ${roll.remainingLength}م، مطلوب ${waste}م)`)
+          // Use rounding to avoid floating-point errors
+          const rollRemaining = Math.round((roll.remainingLength || 0) * 1000) / 1000
+          const wasteCheck = Math.round(waste * 1000) / 1000
+          if (wasteCheck > rollRemaining) {
+            errors.push(`${roll.code}: الرصيد غير كافٍ (متبقي ${rollRemaining.toFixed(2)}م، مطلوب ${wasteCheck.toFixed(2)}م)`)
             continue
           }
           const consumption = await db.rollConsumption.create({
@@ -890,7 +896,7 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
               transactionType: 'هالك',
             },
           })
-          const newRemaining = (roll.remainingLength || 0) - waste
+          const newRemaining = Math.round((rollRemaining - waste) * 1000) / 1000
           let newStatus = 'active'
           if (newRemaining <= 0) newStatus = 'finished'
           else if (newRemaining <= 2) newStatus = 'low'

@@ -26,9 +26,13 @@ export async function POST(req: NextRequest) {
     const waste = Number(body.waste) || 0
     const totalUsed = metersUsed + waste
 
-    if (totalUsed > (roll.remainingLength || 0)) {
+    // Use rounding to avoid floating-point errors (2.0 vs 1.9999999999)
+    const remaining = Math.round((roll.remainingLength || 0) * 1000) / 1000
+    const used = Math.round(totalUsed * 1000) / 1000
+
+    if (used > remaining) {
       return NextResponse.json({
-        error: `الرصيد غير كافٍ. المتبقي ${roll.remainingLength}م، المطلوب ${totalUsed}م`,
+        error: `الرصيد غير كافٍ. المتبقي ${remaining.toFixed(2)}م، المطلوب ${used.toFixed(2)}م`,
       }, { status: 400 })
     }
 
@@ -53,7 +57,7 @@ export async function POST(req: NextRequest) {
       },
     })
 
-    const newRemaining = (roll.remainingLength || 0) - totalUsed
+    const newRemaining = Math.round((remaining - used) * 1000) / 1000
     let newStatus = 'active'
     if (newRemaining <= 0) newStatus = 'finished'
     else if (newRemaining <= 2) newStatus = 'low'

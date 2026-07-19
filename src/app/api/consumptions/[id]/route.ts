@@ -50,11 +50,13 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     // Check if the target roll has enough remaining
     // If same roll: add oldUsed back (already restored above) before checking
     // If different roll: use its current remaining
+    // Use rounding to avoid floating-point errors
     const availableAfterRestore = targetRoll.code === existing.rollCode
-      ? (targetRoll.remainingLength || 0) + oldUsed  // restored value
-      : (targetRoll.remainingLength || 0)
+      ? Math.round(((targetRoll.remainingLength || 0) + oldUsed) * 1000) / 1000
+      : Math.round((targetRoll.remainingLength || 0) * 1000) / 1000
+    const usedCheck = Math.round(totalUsed * 1000) / 1000
 
-    if (totalUsed > availableAfterRestore) {
+    if (usedCheck > availableAfterRestore) {
       // Rollback the restore
       if (oldRoll) {
         await db.roll.update({
@@ -90,7 +92,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     })
 
     // Deduct from the target roll
-    const newRemaining = availableAfterRestore - totalUsed
+    const newRemaining = Math.round((availableAfterRestore - totalUsed) * 1000) / 1000
     let newStatus = 'active'
     if (newRemaining <= 0) newStatus = 'finished'
     else if (newRemaining <= 2) newStatus = 'low'
