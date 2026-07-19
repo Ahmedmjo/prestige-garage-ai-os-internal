@@ -217,7 +217,7 @@ export function ProtectionModule() {
             رول جديد
           </Button>
           <Button
-            onClick={() => setShowConsumptionDialog(true)}
+            onClick={() => { setDialogMode('consumption'); setSelectedRoll(null); setShowConsumptionDialog(true) }}
             variant="outline"
             className="border-[#FF9100]/30 bg-[#FF9100]/10 text-[#FF9100] hover:bg-[#FF9100]/20"
           >
@@ -304,7 +304,7 @@ export function ProtectionModule() {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <Button
-            onClick={() => setShowConsumptionDialog(true)}
+            onClick={() => { setDialogMode('consumption'); setSelectedRoll(null); setShowConsumptionDialog(true) }}
             className="bg-[#00C853] hover:bg-[#00C853]/80 text-white border-0"
           >
             <Plus size={16} className="ml-1" />
@@ -312,7 +312,7 @@ export function ProtectionModule() {
           </Button>
           {duplicateContext && (
             <Button
-              onClick={() => setShowConsumptionDialog(true)}
+              onClick={() => { setDialogMode('consumption'); setShowConsumptionDialog(true) }}
               className="bg-[#03DAC6]/15 text-[#03DAC6] border border-[#03DAC6]/30 hover:bg-[#03DAC6]/25"
               title={`تكرار سحب على نفس السيارة/OB: ${duplicateContext.workOrder}`}
             >
@@ -335,7 +335,7 @@ export function ProtectionModule() {
           </div>
         </div>
         <Button
-          onClick={() => setShowConsumptionDialog(true)}
+          onClick={() => { setDialogMode('waste'); setSelectedRoll(null); setShowConsumptionDialog(true) }}
           className="bg-[#FF9100] hover:bg-[#FF9100]/80 text-white border-0"
           title="تسجيل هالك (بواقي/هدر) — نظام OBX منفصل"
         >
@@ -401,7 +401,7 @@ export function ProtectionModule() {
                 transition={{ delay: idx * 0.02 }}
                 onClick={() => {
                   setSelectedRoll(roll)
-                  setShowConsumptionDialog(true)
+                  setDialogMode('consumption'); setShowConsumptionDialog(true)
                 }}
                 className="prestige-card p-4 cursor-pointer group relative overflow-hidden"
                 style={{ background: st.bg }}
@@ -507,7 +507,7 @@ export function ProtectionModule() {
       <AddRollDialog open={showAddDialog} onOpenChange={setShowAddDialog} onSuccess={loadData} />
       <ConsumptionDialog
         open={showConsumptionDialog}
-        onOpenChange={setShowConsumptionDialog}
+        onOpenChange={(v) => { setShowConsumptionDialog(v); if (!v) setSelectedRoll(null) }}
         rolls={rolls}
         preselectedRoll={selectedRoll}
         defaultOB={dialogMode === 'waste' ? nextOBX : nextOB}

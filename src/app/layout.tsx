@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
-import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "@/components/ui/sonner";
+import { Toaster as RadixToaster } from "@/components/ui/toaster";
 import { I18nProvider } from "@/lib/i18n-context";
 
 export const metadata: Metadata = {
@@ -59,7 +60,8 @@ export default function RootLayout({
       </head>
       <body className="antialiased bg-background text-foreground">
         <I18nProvider>{children}</I18nProvider>
-        <Toaster />
+        <SonnerToaster />
+        <RadixToaster />
         <script
           dangerouslySetInnerHTML={{
             __html: "if ('serviceWorker' in navigator) { window.addEventListener('load', function() { navigator.serviceWorker.register('/sw.js').catch(function() {}); }); }",
