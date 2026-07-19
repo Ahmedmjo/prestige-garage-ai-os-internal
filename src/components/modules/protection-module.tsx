@@ -655,7 +655,7 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
   const [form, setForm] = useState({
     rollCode: '', date: new Date().toISOString().split('T')[0],
     clientName: '', carType: '', plateNumber: '',
-    metersUsed: '', waste: '', usageArea: '', workOrder: '', notes: '', technician: '',
+    metersUsed: '', waste: '', usageArea: '', workOrder: defaultOB, notes: '', technician: '',
   })
   const [saving, setSaving] = useState(false)
 
