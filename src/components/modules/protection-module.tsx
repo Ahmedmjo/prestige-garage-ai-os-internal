@@ -797,7 +797,7 @@ function ConsumptionDialog({ open, onOpenChange, rolls, preselectedRoll, default
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)} className="text-gray-400">إلغاء</Button>
           <Button onClick={handleSubmit} disabled={saving} className="prestige-gradient border-0">
-            {saving ? 'جاري الحفظ...' : 'تسجيل الاستهلاك'}
+            {saving ? 'جاري الحفظ...' : (isWasteMode ? 'تسجيل الهالك' : 'تسجيل الاستهلاك')}
           </Button>
         </DialogFooter>
       </DialogContent>
