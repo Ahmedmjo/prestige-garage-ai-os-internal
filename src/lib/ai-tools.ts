@@ -499,26 +499,12 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
         }
         const unifiedType = unifyServiceType(args.serviceType) || 'أخرى'
 
-        // ربط تلقائي بالعميل: يدور بالاسم، ولو مش موجود ينشئ سجل عميل جديد بكود
-        let customerId: string | null = null
-        if (args.clientName) {
-          let customer = await db.customer.findFirst({ where: { name: args.clientName } })
-          if (!customer) {
-            const custCount = await db.customer.count()
-            customer = await db.customer.create({
-              data: { code: `CUS-${String(custCount + 1).padStart(4, '0')}`, name: args.clientName, phone: args.clientPhone || null },
-            })
-          }
-          customerId = customer.id
-        }
-
         const service = await db.service.create({
           data: {
             code,
             date: args.date ? new Date(args.date) : new Date(),
             plate: args.plate || null,
             clientName: args.clientName || null,
-            customerId,
             carType: args.carType || null,
             serviceType: unifiedType,
             serviceCategory: unifiedType,
