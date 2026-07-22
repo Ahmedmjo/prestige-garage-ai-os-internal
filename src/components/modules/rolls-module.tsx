@@ -137,8 +137,8 @@ export function RollsModule() {
     critical: rolls.filter(r => computeRollStatus(r.remainingLength || 0) === 'critical').length,
     finished: rolls.filter(r => computeRollStatus(r.remainingLength || 0) === 'finished').length,
     ppf: rolls.filter(r => r.rollCategory === 'ppf').length,
-    thermalLong: rolls.filter(r => r.rollCategory === 'thermal_long').length,
-    thermalShort: rolls.filter(r => r.rollCategory === 'thermal_short').length,
+    
+    
     totalValue: rolls.reduce((s, r) => {
       const remaining = r.remainingLength || 0
       const total = r.totalLength || 1
@@ -264,8 +264,7 @@ export function RollsModule() {
           {[
             { id: 'all', label: lang === 'ar' ? 'الكل' : 'All' },
             { id: 'ppf', label: lang === 'ar' ? 'بروتيكشن' : 'PPF' },
-            { id: 'thermal_long', label: lang === 'ar' ? 'عزل طويل' : 'Thermal Long' },
-            { id: 'thermal_short', label: lang === 'ar' ? 'عزل قصير' : 'Thermal Short' },
+            { id: 'thermal', label: lang === 'ar' ? 'عزل حراري' : 'Thermal' },
           ].map(f => (
             <button
               key={f.id}
@@ -349,16 +348,15 @@ export function RollsModule() {
                         className="text-[10px] px-1.5 py-0"
                         style={{
                           background: roll.rollCategory === 'ppf' ? 'rgba(0,200,83,0.15)' :
-                                      roll.rollCategory === 'thermal_long' ? 'rgba(3,218,198,0.15)' :
+                                      roll.rollCategory === 'thermal' ? 'rgba(3,218,198,0.15)' :
                                       'rgba(255,145,0,0.15)',
                           color: roll.rollCategory === 'ppf' ? '#00C853' :
-                                 roll.rollCategory === 'thermal_long' ? '#03DAC6' : '#FF9100',
+                                 roll.rollCategory === 'thermal' ? '#03DAC6' : '#FF9100',
                           border: 'none',
                         }}
                       >
                         {roll.rollCategory === 'ppf' ? (lang === 'ar' ? 'بروتيكشن' : 'PPF') :
-                         roll.rollCategory === 'thermal_long' ? (lang === 'ar' ? 'عزل طويل' : 'Thermal L') :
-                         (lang === 'ar' ? 'عزل قصير' : 'Thermal S')}
+                         (lang === 'ar' ? 'عزل حراري' : 'Thermal')}
                       </Badge>
                     </div>
                     <p className="text-sm text-gray-400">{roll.brand} · {roll.type}</p>
@@ -740,7 +738,7 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
                   // THM = Thermal (distinctive — NOT THF, because THF is used by the
                   // thermal-insulation SERVICE code in the services section).
                   // Only prefills when type is empty (user can override).
-                  const newType = (cat === 'thermal_long' || cat === 'thermal_short') && !prev.type ? 'THM' : prev.type
+                  const newType = (cat === 'thermal' || cat === 'thermal') && !prev.type ? 'THM' : prev.type
                   const nextCode = computeSuggestedCode(prev.brand, newType)
                   return { ...prev, rollCategory: cat, type: newType, code: nextCode || prev.code }
                 })
@@ -748,8 +746,7 @@ function AddRollDialog({ open, onOpenChange, onSuccess, existingRolls }: {
               className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-1"
             >
               <option value="ppf">{lang === 'ar' ? 'بروتيكشن PPF' : 'PPF Protection'}</option>
-              <option value="thermal_long">{lang === 'ar' ? 'عزل طويل' : 'Thermal Long'}</option>
-              <option value="thermal_short">{lang === 'ar' ? 'عزل قصير' : 'Thermal Short'}</option>
+              <option value="thermal">{lang === 'ar' ? 'عزل حراري' : 'Thermal Insulation'}</option>
             </select>
           </div>
           {/* Brand: select dropdown with existing brands + "other" option */}
@@ -906,8 +903,8 @@ function EditRollDialog({ roll, open, onOpenChange, onSuccess }: {
               className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-1"
             >
               <option value="ppf">{lang === 'ar' ? 'بروتيكشن PPF' : 'PPF Protection'}</option>
-              <option value="thermal_long">{lang === 'ar' ? 'عزل طويل' : 'Thermal Long'}</option>
-              <option value="thermal_short">{lang === 'ar' ? 'عزل قصير' : 'Thermal Short'}</option>
+              <option value="thermal">{lang === 'ar' ? 'عزل طويل' : 'Thermal Long'}</option>
+              <option value="thermal">{lang === 'ar' ? 'عزل قصير' : 'Thermal Short'}</option>
             </select>
           </div>
           <Field label={`${lang === 'ar' ? 'الماركة' : 'Brand'}`} value={form.brand} onChange={v => setForm({ ...form, brand: v })} />

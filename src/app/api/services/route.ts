@@ -37,11 +37,11 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    // Generate code if not provided
+    // Generate code if not provided — uses PREFIX+3-digit pattern (DET001, POL001, THF001...)
     let code = body.code
     if (!code) {
-      const count = await db.service.count()
-      code = `SRV-${String(count + 1).padStart(4, '0')}`
+      const { generateServiceCode } = await import('@/lib/service-codes')
+      code = await generateServiceCode(body.serviceType)
     }
 
     // Unify service type terminology

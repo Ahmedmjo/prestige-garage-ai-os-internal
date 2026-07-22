@@ -705,6 +705,13 @@ const PROVIDERS = {
     apiKey: process.env.GEMINI_API_KEY || '',
     model: 'gemini-flash-latest',
   },
+  // Secondary: OpenAI (GPT-4o-mini)
+  openai: {
+    enabled: !!process.env.OPENAI_API_KEY,
+    apiKey: process.env.OPENAI_API_KEY || '',
+    model: 'gpt-4o-mini',
+    url: 'https://api.openai.com/v1/chat/completions',
+  },
   // Secondary: LM5 (OpenRouter — Llama 3.3 70B)
   lm5: {
     enabled: !!process.env.OPENROUTER_API_KEY,
@@ -861,7 +868,7 @@ function cleanReply(text: string): string {
 // ─── Tool table map (for audit logging) ──────────────────────
 const TOOL_TABLE_MAP: Record<string, string> = {
   create_service: 'services', add_employee: 'employees', record_attendance: 'attendance', batch_attendance: 'attendance',
-  record_advance: 'advances', record_penalty: 'penalties', add_stock_item: 'stock_items',
+  record_advance: 'advances', batch_advances: 'advances', record_penalty: 'penalties', add_stock_item: 'stock_items',
   stock_movement: 'stock_movements', add_roll: 'rolls', roll_consumption: 'roll_consumptions',
   batch_waste: 'roll_consumptions',
   create_customer: 'customers', create_supplier: 'suppliers', create_offer: 'offers',
@@ -1012,7 +1019,18 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`Gemini: ${e.message}`) }
     }
 
-    // Try 2: LM5 (OpenRouter Llama 3.3 70B) — secondary
+    // Try 2: OpenAI (GPT-4o-mini) — secondary
+    if (!rawReply && PROVIDERS.openai?.enabled) {
+      try {
+        rawReply = await callOpenAICompatible(
+          PROVIDERS.openai.url, PROVIDERS.openai.apiKey, PROVIDERS.openai.model,
+          messages, 0.2, 800,
+        )
+        providerUsed = 'openai-gpt4o-mini'
+      } catch (e: any) { errors.push(`OpenAI: ${e.message}`) }
+    }
+
+    // Try 3: LM5 (OpenRouter Llama 3.3 70B) — tertiary
     if (!rawReply && PROVIDERS.lm5.enabled) {
       try {
         rawReply = await callOpenAICompatible(
@@ -1023,7 +1041,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`OpenRouter: ${e.message}`) }
     }
 
-    // Try 3: Groq (Llama 3.3 70B) — fast fallback
+    // Try 4: Groq (Llama 3.3 70B) — fast fallback
     if (!rawReply && PROVIDERS.groq.enabled) {
       try {
         rawReply = await callOpenAICompatible(PROVIDERS.groq.url, PROVIDERS.groq.apiKey, PROVIDERS.groq.model, messages, 0.2, 600)
@@ -1031,7 +1049,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`Groq: ${e.message}`) }
     }
 
-    // Try 4: OpenRouter alternative (Llama 3.1 8B)
+    // Try 5: OpenRouter alternative (Llama 3.1 8B)
     if (!rawReply && PROVIDERS.openrouter.enabled) {
       try {
         rawReply = await callOpenAICompatible(
@@ -1042,7 +1060,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`OpenRouter: ${e.message}`) }
     }
 
-    // Try 5: z-ai-web-dev-sdk (GLM)
+    // Try 6: z-ai-web-dev-sdk (GLM)
     if (!rawReply) {
       try {
         rawReply = await callZAI(messages, 0.2, 600)
@@ -1050,7 +1068,7 @@ export async function chatWithAssistant(userMessage: string, conversationHistory
       } catch (e: any) { errors.push(`Z-AI: ${e.message}`) }
     }
 
-    // Try 6: Smart fallback
+    // Try 7: Smart fallback
     if (!rawReply) {
       rawReply = await smartFallback(userMessage, snapshot)
       providerUsed = 'smart-fallback'

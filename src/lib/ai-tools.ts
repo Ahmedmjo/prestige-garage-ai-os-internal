@@ -118,6 +118,33 @@ export const AI_TOOLS = [
   {
     type: 'function',
     function: {
+      name: 'batch_advances',
+      description: 'تسجيل عدة سلف دفعة واحدة لموظفين مختلفين أو نفس الموظف. استخدمها عندما يطلب المستخدم تسجيل أكثر من سلفة في رسالة واحدة.',
+      parameters: {
+        type: 'object',
+        properties: {
+          advances: {
+            type: 'array',
+            description: 'قائمة السلف',
+            items: {
+              type: 'object',
+              properties: {
+                employeeName: { type: 'string', description: 'اسم الموظف' },
+                amount: { type: 'number', description: 'مبلغ السلفة' },
+                date: { type: 'string', description: 'التاريخ YYYY-MM-DD (اختياري)' },
+                notes: { type: 'string', description: 'ملاحظات (اختياري)' },
+              },
+              required: ['employeeName', 'amount'],
+            },
+          },
+        },
+        required: ['advances'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'record_penalty',
       description: 'تسجيل جزاء/خصم على موظف — يُخصم من صافي مرتبه.',
       parameters: {
@@ -405,6 +432,11 @@ export function summarizeToolCall(name: string, args: any): string {
     }
     case 'record_advance':
       return `💵 تسجيل سلفة:\n• الموظف: ${args.employeeName}\n• المبلغ: ${num(args.amount)} ج.م\nستُخصم من صافي المرتب. هل أؤكد؟`
+    case 'batch_advances': {
+      const items = Array.isArray(args.advances) ? args.advances : []
+      const lines = items.map((it: any, i: number) => `${i + 1}. ${it.employeeName} — ${num(it.amount)} ج.م`)
+      return `💵 تسجيل ${items.length} سلفة:\n${lines.join('\n')}\nهل أؤكد التسجيل؟`
+    }
     case 'record_penalty':
       return `⚠️ تسجيل جزاء:\n• الموظف: ${args.employeeName}\n• المبلغ: ${num(args.amount)} ج.م\n${args.reason ? `• السبب: ${args.reason}\n` : ''}ستُخصم من صافي المرتب. هل أؤكد؟`
     case 'add_stock_item':
@@ -635,6 +667,32 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
         return { success: true, message: `✅ تم تسجيل سلفة ${Number(args.amount).toLocaleString('en-US')} ج.م لـ"${emp.name}".`, data: adv }
       }
 
+      case 'batch_advances': {
+        const items = Array.isArray(args.advances) ? args.advances : []
+        if (items.length === 0) return { success: false, message: '❌ قائمة السلف فارغة.' }
+        const results: string[] = []
+        const errors: string[] = []
+        for (const item of items) {
+          const emp = await db.employee.findFirst({ where: { name: item.employeeName } })
+          if (!emp) {
+            errors.push(`${item.employeeName}: غير موجود`)
+            continue
+          }
+          const d = item.date ? new Date(item.date) : new Date()
+          await db.advance.create({
+            data: {
+              employeeId: emp.id, employeeName: emp.name, date: d,
+              amount: Number(item.amount) || 0,
+              month: d.getMonth() + 1, year: d.getFullYear(),
+              notes: item.notes || null,
+            },
+          })
+          results.push(`${emp.name}: ${item.amount} ج.م`)
+        }
+        let msg = `✅ تم تسجيل ${results.length} سلفة:\n` + results.map(r => `• ${r}`).join('\n')
+        if (errors.length > 0) msg += `\n\n⚠️ ${errors.length} لم يُسجل:\n` + errors.map(e => `• ${e}`).join('\n')
+        return { success: results.length > 0, message: msg }
+      }
       case 'record_penalty': {
         const emp = await findEmployeeByName(args.employeeName)
         if (!emp) return { success: false, message: `❌ لم يتم العثور على موظف باسم "${args.employeeName}".` }

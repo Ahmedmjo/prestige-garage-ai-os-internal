@@ -429,26 +429,7 @@ function AddServiceDialog({ open, onOpenChange, onSuccess }: {
           <div>
             <Label className="text-gray-400 text-xs">{t('code')}</Label>
             <Input value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} placeholder={lang === 'ar' ? 'تلقائي' : 'Auto'} className="bg-[#000] border-white/10 text-white mt-1 font-mono text-sm" />
-            {/* Live code suggestion based on service type */}
-            {form.serviceType && (
-              <p className="text-[10px] text-[#03DAC6] mt-1">
-                {lang === 'ar' ? `الكود المقترح: ` : `Suggested: `}
-                <span className="font-mono font-bold">
-                  {(() => {
-                    const t = form.serviceType.toLowerCase()
-                    let prefix = 'OTH'
-                    if (t.includes('عزل') || t.includes('thermal') || t.includes('thf')) prefix = 'THF'
-                    else if (t.includes('فاميه') || t.includes('thv')) prefix = 'THV'
-                    else if (t.includes('بوليش') || t.includes('polish') || t.includes('تلميع')) prefix = 'POL'
-                    else if (t.includes('نانو') || t.includes('nano') || t.includes('ceramic')) prefix = 'NNO'
-                    else if (t.includes('ديتيلنج') || t.includes('دتيلنج') || t.includes('detail')) prefix = 'DET'
-                    else if (t.includes('بروتيكشن') || t.includes('protection') || t.includes('ppf') || t.includes('حماية')) prefix = 'PPF'
-                    return prefix
-                  })()}
-                  ???
-                </span>
-              </p>
-            )}
+
           </div>
           <div>
             <Label className="text-gray-400 text-xs">{t('date')}</Label>
@@ -466,40 +447,12 @@ function AddServiceDialog({ open, onOpenChange, onSuccess }: {
             <Label className="text-gray-400 text-xs">{t('plate')}</Label>
             <Input value={form.plate} onChange={e => setForm({ ...form, plate: e.target.value })} className="bg-[#000] border-white/10 text-white mt-1" />
           </div>
-          <div className="col-span-2">
-            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'نوع الخدمة * — اختر بالضغط' : 'Service Type * — tap to select'}</Label>
-            {/* Color-coded quick-select buttons */}
-            <div className="flex flex-wrap gap-1.5 mt-1">
-              {SERVICE_TYPES.map(t => {
-                const color = getTypeColor(t)
-                const isSelected = form.serviceType === t
-                return (
-                  <button
-                    key={t}
-                    type="button"
-                    onClick={() => setForm({ ...form, serviceType: t })}
-                    className={`px-2 py-1 rounded-md text-[11px] font-medium border transition-all ${
-                      isSelected ? 'text-white' : 'text-gray-400 hover:text-white'
-                    }`}
-                    style={isSelected ? {
-                      background: color + '30',
-                      borderColor: color,
-                      color: color,
-                    } : {
-                      background: 'rgba(255,255,255,0.03)',
-                      borderColor: 'rgba(255,255,255,0.08)',
-                    }}
-                  >
-                    {t}
-                  </button>
-                )
-              })}
-            </div>
-            {/* Also keep the select as fallback */}
+          <div>
+            <Label className="text-gray-400 text-xs">{lang === 'ar' ? 'نوع الخدمة *' : 'Service Type *'}</Label>
             <select
               value={form.serviceType}
               onChange={e => setForm({ ...form, serviceType: e.target.value })}
-              className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-2"
+              className="w-full bg-[#000] border border-white/10 rounded-md px-3 py-2 text-white mt-1"
             >
               {SERVICE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
