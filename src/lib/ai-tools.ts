@@ -402,6 +402,167 @@ export const AI_TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'batch_services',
+      description: 'تسجيل عدة خدمات دفعة واحدة. استخدمها عندما يطلب المستخدم تسجيل أكثر من خدمة في رسالة واحدة (مثل "سجل 3 خدمات: بوليش 500، نانو 1500، ديتيلنج 800"). كل عنصر يحتوي على نوع الخدمة والسعر وبيانات اختيارية. سيتم توليد كود تلقائي لكل خدمة.',
+      parameters: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            description: 'قائمة الخدمات المطلوب تسجيلها',
+            items: {
+              type: 'object',
+              properties: {
+                serviceType: { type: 'string', description: 'نوع الخدمة مثل بوليش، نانو سيراميك، ديتيلنج، عزل حراري، بروتيكشن' },
+                price: { type: 'number', description: 'سعر الخدمة بالجنيه' },
+                clientName: { type: 'string', description: 'اسم العميل (اختياري)' },
+                carType: { type: 'string', description: 'نوع السيارة (اختياري)' },
+                plate: { type: 'string', description: 'رقم اللوحة (اختياري)' },
+                technician: { type: 'string', description: 'اسم الفني المنفّذ (اختياري)' },
+                commissionAmount: { type: 'number', description: 'مبلغ عمولة الفني إن وُجد (اختياري)' },
+                date: { type: 'string', description: 'تاريخ الخدمة YYYY-MM-DD (اختياري، افتراضياً اليوم)' },
+                notes: { type: 'string', description: 'ملاحظات إضافية (اختياري)' },
+              },
+              required: ['serviceType', 'price'],
+            },
+          },
+        },
+        required: ['items'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'batch_penalties',
+      description: 'تسجيل عدة جزاءات دفعة واحدة لموظفين مختلفين. استخدمها عندما يطلب المستخدم تسجيل أكثر من جزاء في رسالة واحدة.',
+      parameters: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            description: 'قائمة الجزاءات',
+            items: {
+              type: 'object',
+              properties: {
+                employeeName: { type: 'string', description: 'اسم الموظف' },
+                amount: { type: 'number', description: 'مبلغ الجزاء' },
+                reason: { type: 'string', description: 'سبب الجزاء (اختياري)' },
+                date: { type: 'string', description: 'التاريخ YYYY-MM-DD (اختياري، افتراضياً اليوم)' },
+              },
+              required: ['employeeName', 'amount'],
+            },
+          },
+        },
+        required: ['items'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'batch_stock_movements',
+      description: 'تسجيل عدة حركات مخزون (استلام/سحب) دفعة واحدة. استخدمها عندما يطلب المستخدم تسجيل أكثر من حركة مخزون في رسالة واحدة. كل عنصر يحدد الصنف بالكود أو الاسم ونوع الحركة (add=استلام، withdraw=سحب) والكمية.',
+      parameters: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            description: 'قائمة حركات المخزون',
+            items: {
+              type: 'object',
+              properties: {
+                itemName: { type: 'string', description: 'اسم الخامة (يُستخدم إن لم يُعرف الكود)' },
+                itemCode: { type: 'string', description: 'كود الخامة (مثل STL-001) — مُفضّل لضمان الربط الصحيح' },
+                type: { type: 'string', enum: ['add', 'withdraw'], description: 'نوع الحركة: add=استلام، withdraw=سحب' },
+                quantity: { type: 'number', description: 'الكمية' },
+                notes: { type: 'string', description: 'ملاحظات (اختياري)' },
+              },
+              required: ['type', 'quantity'],
+            },
+          },
+        },
+        required: ['items'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_commission',
+      description: 'حذف عمولة بالبحث عن اسم الموظف والمبلغ (تقريبي — يجد أقرب تطابق بنسبة 10%). يحذف الأحدث. العمولات لا تؤثر على أرصدة منفصلة فلا حاجة لاسترجاع أي رصيد.',
+      parameters: {
+        type: 'object',
+        properties: {
+          employeeName: { type: 'string', description: 'اسم الموظف' },
+          amount: { type: 'number', description: 'مبلغ العمولة (تقريبي — سيجد أقرب تطابق)' },
+        },
+        required: ['employeeName', 'amount'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_advance',
+      description: 'حذف سلفة بالبحث عن اسم الموظف والمبلغ (تقريبي — يجد أقرب تطابق بنسبة 10%). يحذف الأحدث. السلف تُتابع بشكل منفصل عن الأرصدة فلا حاجة لاسترجاع أي رصيد.',
+      parameters: {
+        type: 'object',
+        properties: {
+          employeeName: { type: 'string', description: 'اسم الموظف' },
+          amount: { type: 'number', description: 'مبلغ السلفة (تقريبي)' },
+        },
+        required: ['employeeName', 'amount'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_penalty',
+      description: 'حذف جزاء بالبحث عن اسم الموظف والمبلغ (تقريبي — يجد أقرب تطابق بنسبة 10%). يحذف الأحدث.',
+      parameters: {
+        type: 'object',
+        properties: {
+          employeeName: { type: 'string', description: 'اسم الموظف' },
+          amount: { type: 'number', description: 'مبلغ الجزاء (تقريبي)' },
+        },
+        required: ['employeeName', 'amount'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_consumption',
+      description: 'حذف عملية استهلاك رول محددة بالبحث عن كود الرول ورقم أمر الشغل (workOrder). يسترجع الأمتار المستخدمة + الهالك إلى رصيد الرول المتبقي ويعيد حساب حالة الرول.',
+      parameters: {
+        type: 'object',
+        properties: {
+          rollCode: { type: 'string', description: 'كود الرول' },
+          workOrder: { type: 'string', description: 'رقم أمر الشغل (OB أو OBX) — يحدد العملية بدقة' },
+        },
+        required: ['rollCode', 'workOrder'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'delete_roll',
+      description: 'حذف رول بالكامل بالبحث عن الكود. سيتم حذف الرول وجميع عمليات الاستهلاك المرتبطة به (cascade). لا يمكن التراجع.',
+      parameters: {
+        type: 'object',
+        properties: {
+          rollCode: { type: 'string', description: 'كود الرول (يدعم البحث الجزئي مثل HXS)' },
+        },
+        required: ['rollCode'],
+      },
+    },
+  },
 ] as const
 
 export type ToolName = typeof AI_TOOLS[number]['function']['name']
@@ -512,6 +673,37 @@ export function summarizeToolCall(name: string, args: any): string {
       const y = Number(args.year) || now.getFullYear()
       return `💰 صرف مرتب:\n• الموظف: ${args.employeeName}\n• الشهر: ${monthNames[m - 1]} ${y}\n• الصافي: ${num(args.amount)} ج.م\nهذه عملية مالية نهائية وستُسجَّل باسمك. هل أؤكد الصرف؟`
     }
+    case 'batch_services': {
+      const items = Array.isArray(args.items) ? args.items : []
+      const lines = items.map((it: any, i: number) => {
+        const parts: string[] = [`${i + 1}. ${it.serviceType} — ${num(it.price)} ج.م`]
+        if (it.clientName) parts.push(`العميل: ${it.clientName}`)
+        if (it.carType) parts.push(`السيارة: ${it.carType}`)
+        if (it.technician) parts.push(`الفني: ${it.technician}${it.commissionAmount ? ` (عمولة ${num(it.commissionAmount)})` : ''}`)
+        return parts.join('، ')
+      })
+      return `📝 تسجيل ${items.length} خدمة:\n${lines.join('\n')}\nهل أؤكد؟`
+    }
+    case 'batch_penalties': {
+      const items = Array.isArray(args.items) ? args.items : []
+      const lines = items.map((it: any, i: number) => `${i + 1}. ${it.employeeName} — ${num(it.amount)} ج.م${it.reason ? ` (${it.reason})` : ''}`)
+      return `⚠️ تسجيل ${items.length} جزاء:\n${lines.join('\n')}\nهل أؤكد؟`
+    }
+    case 'batch_stock_movements': {
+      const items = Array.isArray(args.items) ? args.items : []
+      const lines = items.map((it: any, i: number) => `${i + 1}. ${it.type === 'withdraw' ? 'سحب' : 'استلام'} ${num(it.quantity)} — ${it.itemCode || it.itemName}`)
+      return `📦 تسجيل ${items.length} حركة مخزون:\n${lines.join('\n')}\nهل أؤكد؟`
+    }
+    case 'delete_commission':
+      return `🗑️ حذف عمولة: ${args.employeeName} — ${num(args.amount)} ج.م\nهل أؤكد الحذف؟`
+    case 'delete_advance':
+      return `🗑️ حذف سلفة: ${args.employeeName} — ${num(args.amount)} ج.م\nهل أؤكد الحذف؟`
+    case 'delete_penalty':
+      return `🗑️ حذف جزاء: ${args.employeeName} — ${num(args.amount)} ج.م\nهل أؤكد الحذف؟`
+    case 'delete_consumption':
+      return `🗑️ حذف استهلاك: ${args.rollCode} — ${args.workOrder}\nهل أؤكد الحذف؟`
+    case 'delete_roll':
+      return `🗑️ حذف رول: ${args.rollCode}\nسيتم حذف الرول وجميع عمليات الاستهلاك المرتبطة. هل أؤكد الحذف؟`
     default:
       return `تأكيد تنفيذ العملية: ${name}؟`
   }
@@ -1103,6 +1295,332 @@ export async function executeTool(name: string, args: any, context?: { userId?: 
             })
 
         return { success: true, message: `✅ تم صرف مرتب "${emp.name}" لشهر ${month}/${year} بمبلغ ${amount.toLocaleString('en-US')} ج.م بنجاح.`, data: payment }
+      }
+
+      case 'batch_services': {
+        // تسجيل عدة خدمات دفعة واحدة — توليد كود تلقائي لكل خدمة
+        const items = Array.isArray(args.items) ? args.items : []
+        if (items.length === 0) {
+          return { success: false, message: '❌ قائمة الخدمات فارغة.' }
+        }
+        const results: string[] = []
+        const errors: string[] = []
+        const createdIds: string[] = []
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i] || {}
+          try {
+            if (!it.serviceType || !it.price) {
+              errors.push(`#${i + 1}: نوع الخدمة والسعر مطلوبان`)
+              continue
+            }
+            const code = await generateServiceCode(it.serviceType)
+            const unifiedType = unifyServiceType(it.serviceType) || 'أخرى'
+            const d = it.date ? new Date(it.date) : new Date()
+            const service = await db.service.create({
+              data: {
+                code,
+                date: d,
+                plate: it.plate || null,
+                clientName: it.clientName || null,
+                carType: it.carType || null,
+                serviceType: unifiedType,
+                serviceCategory: unifiedType,
+                price: Number(it.price) || 0,
+                paymentMethod: it.paymentMethod || null,
+                technician: it.technician || null,
+                notes: it.notes || null,
+              },
+            })
+            createdIds.push(service.id)
+            // عمولة اختيارية للفني
+            if (it.technician && it.commissionAmount && Number(it.commissionAmount) > 0) {
+              const emp = await db.employee.findUnique({ where: { name: it.technician } })
+              if (emp) {
+                await db.commission.create({
+                  data: {
+                    employeeId: emp.id,
+                    employeeName: emp.name,
+                    date: d,
+                    month: d.getMonth() + 1,
+                    year: d.getFullYear(),
+                    clientName: service.clientName,
+                    carType: service.carType,
+                    serviceType: unifiedType,
+                    serviceCategory: unifiedType,
+                    amount: Number(it.commissionAmount),
+                    notes: `عمولة خدمة ${service.code}`,
+                  },
+                })
+              }
+            }
+            results.push(`${service.code} — ${unifiedType} — ${num(it.price)} ج.م`)
+          } catch (e: any) {
+            errors.push(`#${i + 1} (${it.serviceType || '?'}): ${e.message || 'خطأ'}`)
+          }
+        }
+        let msg = `✅ تم تسجيل ${results.length} خدمة:\n` + results.map(r => `• ${r}`).join('\n')
+        if (errors.length > 0) {
+          msg += `\n\n⚠️ ${errors.length} خدمة لم تُسجل:\n` + errors.map(e => `• ${e}`).join('\n')
+        }
+        return { success: results.length > 0, message: msg, data: { registered: results.length, errors: errors.length, createdIds } }
+      }
+
+      case 'batch_penalties': {
+        const items = Array.isArray(args.items) ? args.items : []
+        if (items.length === 0) {
+          return { success: false, message: '❌ قائمة الجزاءات فارغة.' }
+        }
+        const results: string[] = []
+        const errors: string[] = []
+        const createdIds: string[] = []
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i] || {}
+          try {
+            const emp = await findEmployeeByName(it.employeeName)
+            if (!emp) {
+              errors.push(`${it.employeeName}: غير موجود`)
+              continue
+            }
+            const d = it.date ? new Date(it.date) : new Date()
+            const pen = await db.penalty.create({
+              data: {
+                employeeId: emp.id, employeeName: emp.name, date: d,
+                amount: Number(it.amount) || 0, reason: it.reason || null,
+                month: d.getMonth() + 1, year: d.getFullYear(),
+              },
+            })
+            createdIds.push(pen.id)
+            results.push(`${emp.name}: ${num(it.amount)} ج.م`)
+          } catch (e: any) {
+            errors.push(`${it.employeeName}: ${e.message || 'خطأ'}`)
+          }
+        }
+        let msg = `✅ تم تسجيل ${results.length} جزاء:\n` + results.map(r => `• ${r}`).join('\n')
+        if (errors.length > 0) {
+          msg += `\n\n⚠️ ${errors.length} جزاء لم يُسجل:\n` + errors.map(e => `• ${e}`).join('\n')
+        }
+        return { success: results.length > 0, message: msg, data: { registered: results.length, errors: errors.length, createdIds } }
+      }
+
+      case 'batch_stock_movements': {
+        const items = Array.isArray(args.items) ? args.items : []
+        if (items.length === 0) {
+          return { success: false, message: '❌ قائمة حركات المخزون فارغة.' }
+        }
+        const results: string[] = []
+        const errors: string[] = []
+        const createdIds: string[] = []
+        for (let i = 0; i < items.length; i++) {
+          const it = items[i] || {}
+          try {
+            const item = await findStockItem(it.itemCode, it.itemName)
+            if (!item) {
+              errors.push(`${it.itemCode || it.itemName}: غير موجود`)
+              continue
+            }
+            const qty = Number(it.quantity) || 0
+            if (qty <= 0) {
+              errors.push(`${item.name}: الكمية غير صحيحة`)
+              continue
+            }
+            const movementType = it.type === 'withdraw' ? 'سحب' : 'استلام'
+            if (movementType === 'سحب' && qty > item.currentQty) {
+              errors.push(`${item.name}: الرصيد غير كافٍ (متبقي ${item.currentQty} ${item.unit})`)
+              continue
+            }
+            const unitPrice = item.unitPrice
+            const totalCost = qty * unitPrice
+            const movement = await db.stockMovement.create({
+              data: {
+                itemId: item.id, itemName: item.name, date: new Date(), materialType: item.category,
+                movementType, quantity: qty, unit: item.unit, unitPrice, totalCost,
+                notes: it.notes || null,
+              },
+            })
+            createdIds.push(movement.id)
+            // تحديث رصيد الخامة
+            let newQty = item.currentQty
+            let newReceived = item.totalReceived
+            let newWithdrawn = item.totalWithdrawn
+            if (movementType === 'استلام') { newQty += qty; newReceived += qty }
+            else { newQty -= qty; newWithdrawn += qty }
+            const newStatus = recalcStockStatus(newQty, item.minLevel)
+            await db.stockItem.update({
+              where: { id: item.id },
+              data: { currentQty: newQty, totalReceived: newReceived, totalWithdrawn: newWithdrawn, status: newStatus },
+            })
+            await manageStockAlerts({
+              itemId: item.id, itemName: item.name, category: item.category, unit: item.unit,
+              oldStatus: item.status, newStatus, newQty,
+            })
+            results.push(`${movementType} ${num(qty)} ${item.unit} من "${item.name}" (رصيد: ${newQty})`)
+          } catch (e: any) {
+            errors.push(`${it.itemCode || it.itemName}: ${e.message || 'خطأ'}`)
+          }
+        }
+        let msg = `✅ تم تسجيل ${results.length} حركة مخزون:\n` + results.map(r => `• ${r}`).join('\n')
+        if (errors.length > 0) {
+          msg += `\n\n⚠️ ${errors.length} حركة لم تُسجل:\n` + errors.map(e => `• ${e}`).join('\n')
+        }
+        return { success: results.length > 0, message: msg, data: { registered: results.length, errors: errors.length, createdIds } }
+      }
+
+      case 'delete_commission': {
+        // ابحث عن العمولات للموظف، ثم اختر الأقرب للمبلغ (ضمن 10%)
+        const emp = await findEmployeeByName(args.employeeName)
+        if (!emp) return { success: false, message: `❌ لم يتم العثور على موظف باسم "${args.employeeName}".` }
+        const targetAmount = Number(args.amount) || 0
+        if (targetAmount <= 0) return { success: false, message: '❌ المبلغ المطلوب غير صحيح.' }
+        const commissions = await db.commission.findMany({
+          where: { employeeId: emp.id },
+          orderBy: { createdAt: 'desc' },
+        })
+        if (commissions.length === 0) {
+          return { success: false, message: `❌ لا توجد عمولات مسجلة لـ"${emp.name}".` }
+        }
+        // فلترة ضمن نطاق 10% ثم اختر الأقرب (الأحدث عند التعادل)
+        const tolerance = targetAmount * 0.1
+        const candidates = commissions
+          .map(c => ({ c, diff: Math.abs(c.amount - targetAmount) }))
+          .filter(x => x.diff <= Math.max(tolerance, 1))
+          .sort((a, b) => a.diff - b.diff)
+        if (candidates.length === 0) {
+          // اعرض أحدث 3 كمشاركة للمستخدم
+          const recent = commissions.slice(0, 3).map(c => `• ${num(c.amount)} ج.م — ${c.date ? new Date(c.date).toLocaleDateString('en-GB') : 'بدون تاريخ'}${c.notes ? ` (${c.notes})` : ''}`).join('\n')
+          return { success: false, message: `❌ لم يتم العثور على عمولة بـ ${num(targetAmount)} ج.م لـ"${emp.name}" ضمن 10%. أحدث العمولات:\n${recent}` }
+        }
+        const target = candidates[0].c
+        await db.commission.delete({ where: { id: target.id } })
+        return {
+          success: true,
+          message: `✅ تم حذف عمولة ${num(target.amount)} ج.م لـ"${emp.name}"${target.notes ? ` (${target.notes})` : ''}.`,
+          data: { deletedId: target.id, deletedCode: target.id, employeeName: emp.name, amount: target.amount },
+        }
+      }
+
+      case 'delete_advance': {
+        const emp = await findEmployeeByName(args.employeeName)
+        if (!emp) return { success: false, message: `❌ لم يتم العثور على موظف باسم "${args.employeeName}".` }
+        const targetAmount = Number(args.amount) || 0
+        if (targetAmount <= 0) return { success: false, message: '❌ المبلغ المطلوب غير صحيح.' }
+        const advances = await db.advance.findMany({
+          where: { employeeId: emp.id },
+          orderBy: { createdAt: 'desc' },
+        })
+        if (advances.length === 0) {
+          return { success: false, message: `❌ لا توجد سلف مسجلة لـ"${emp.name}".` }
+        }
+        const tolerance = targetAmount * 0.1
+        const candidates = advances
+          .map(a => ({ a, diff: Math.abs(a.amount - targetAmount) }))
+          .filter(x => x.diff <= Math.max(tolerance, 1))
+          .sort((a, b) => a.diff - b.diff)
+        if (candidates.length === 0) {
+          const recent = advances.slice(0, 3).map(a => `• ${num(a.amount)} ج.م — ${new Date(a.date).toLocaleDateString('en-GB')}${a.notes ? ` (${a.notes})` : ''}`).join('\n')
+          return { success: false, message: `❌ لم يتم العثور على سلفة بـ ${num(targetAmount)} ج.م لـ"${emp.name}" ضمن 10%. أحدث السلف:\n${recent}` }
+        }
+        const target = candidates[0].a
+        await db.advance.delete({ where: { id: target.id } })
+        return {
+          success: true,
+          message: `✅ تم حذف سلفة ${num(target.amount)} ج.م لـ"${emp.name}".`,
+          data: { deletedId: target.id, deletedCode: target.id, employeeName: emp.name, amount: target.amount },
+        }
+      }
+
+      case 'delete_penalty': {
+        const emp = await findEmployeeByName(args.employeeName)
+        if (!emp) return { success: false, message: `❌ لم يتم العثور على موظف باسم "${args.employeeName}".` }
+        const targetAmount = Number(args.amount) || 0
+        if (targetAmount <= 0) return { success: false, message: '❌ المبلغ المطلوب غير صحيح.' }
+        const penalties = await db.penalty.findMany({
+          where: { employeeId: emp.id },
+          orderBy: { createdAt: 'desc' },
+        })
+        if (penalties.length === 0) {
+          return { success: false, message: `❌ لا توجد جزاءات مسجلة لـ"${emp.name}".` }
+        }
+        const tolerance = targetAmount * 0.1
+        const candidates = penalties
+          .map(p => ({ p, diff: Math.abs(p.amount - targetAmount) }))
+          .filter(x => x.diff <= Math.max(tolerance, 1))
+          .sort((a, b) => a.diff - b.diff)
+        if (candidates.length === 0) {
+          const recent = penalties.slice(0, 3).map(p => `• ${num(p.amount)} ج.م — ${new Date(p.date).toLocaleDateString('en-GB')}${p.reason ? ` (${p.reason})` : ''}`).join('\n')
+          return { success: false, message: `❌ لم يتم العثور على جزاء بـ ${num(targetAmount)} ج.م لـ"${emp.name}" ضمن 10%. أحدث الجزاءات:\n${recent}` }
+        }
+        const target = candidates[0].p
+        await db.penalty.delete({ where: { id: target.id } })
+        return {
+          success: true,
+          message: `✅ تم حذف جزاء ${num(target.amount)} ج.م لـ"${emp.name}".`,
+          data: { deletedId: target.id, deletedCode: target.id, employeeName: emp.name, amount: target.amount },
+        }
+      }
+
+      case 'delete_consumption': {
+        // ابحث عن الرول ثم عن العملية بالكود + workOrder
+        const roll = await findRollByCode(args.rollCode)
+        if (!roll) {
+          return { success: false, message: `❌ كود الرول "${args.rollCode}" غير موجود.` }
+        }
+        const workOrder = String(args.workOrder || '').trim()
+        if (!workOrder) {
+          return { success: false, message: '❌ رقم أمر الشغل (workOrder) مطلوب.' }
+        }
+        // ابحث عن أحدث استهلاك للرول بنفس workOrder (يدعم المطابقة الجزئية للأمان)
+        const consumption = await db.rollConsumption.findFirst({
+          where: {
+            rollId: roll.id,
+            workOrder: { contains: workOrder },
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+        if (!consumption) {
+          return { success: false, message: `❌ لا توجد عملية استهلاك للرول ${roll.code} برقم أمر شغل "${workOrder}".` }
+        }
+        // استرجع الأمتار + الهالك إلى رصيد الرول
+        const restoredMeters = Math.round(((consumption.metersUsed || 0) + (consumption.waste || 0)) * 1000) / 1000
+        const currentRemaining = Math.round((roll.remainingLength || 0) * 1000) / 1000
+        const newRemaining = Math.round((currentRemaining + restoredMeters) * 1000) / 1000
+        // لا يتجاوز الطول الكلي
+        const cappedRemaining = roll.totalLength ? Math.min(newRemaining, roll.totalLength) : newRemaining
+        let newStatus = 'active'
+        if (cappedRemaining <= 0) newStatus = 'finished'
+        else if (cappedRemaining <= 2) newStatus = 'low'
+        await db.rollConsumption.delete({ where: { id: consumption.id } })
+        await db.roll.update({
+          where: { id: roll.id },
+          data: { remainingLength: cappedRemaining, status: newStatus },
+        })
+        return {
+          success: true,
+          message: `✅ تم حذف عملية الاستهلاك ${consumption.workOrder} من الرول ${roll.code}. تم استرجاع ${restoredMeters}م. الرصيد الحالي: ${cappedRemaining.toFixed(2)}م.`,
+          data: {
+            deletedId: consumption.id,
+            deletedCode: consumption.workOrder || consumption.id,
+            rollCode: roll.code,
+            restoredMeters,
+            newRemaining: cappedRemaining,
+          },
+        }
+      }
+
+      case 'delete_roll': {
+        const roll = await findRollByCode(args.rollCode)
+        if (!roll) {
+          return { success: false, message: `❌ كود الرول "${args.rollCode}" غير موجود.` }
+        }
+        // cascade: حذف الاستهلاكات أولاً ثم الرول
+        const consumptionsCount = await db.rollConsumption.count({ where: { rollId: roll.id } })
+        await db.rollConsumption.deleteMany({ where: { rollId: roll.id } })
+        await db.alert.deleteMany({ where: { relatedId: roll.id, relatedType: 'roll' } })
+        await db.roll.delete({ where: { id: roll.id } })
+        return {
+          success: true,
+          message: `✅ تم حذف الرول ${roll.code} (${roll.brand} ${roll.type}) بنجاح. تم حذف ${consumptionsCount} عملية استهلاك مرتبطة.`,
+          data: { deletedId: roll.id, deletedCode: roll.code, brand: roll.brand, type: roll.type, consumptionsCount },
+        }
       }
 
       default:

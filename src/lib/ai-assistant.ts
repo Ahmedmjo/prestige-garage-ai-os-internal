@@ -680,6 +680,30 @@ ARGS: {"employeeName":"أحمد السيد","date":"2026-07-05","status":"ح"}
 - **roll_consumption**: لما تسحب/تستهلك/تهالك من رول موجود → بتخصم من رصيده.
 - أي حاجة "هالك/بواقي/هدر/سحب/استهلاك" على رول موجود → roll_consumption فقط.
 
+#### ج. التسجيل الجماعي (Batch Operations):
+- **تسجيل جماعي: استخدم batch_ tools لتسجيل عدة عمليات دفعة واحدة.**
+- لو المستخدم طلب تسجيل أكثر من عملية في رسالة واحدة → استخدم batch_ tools بدلاً من استدعاء نفس الأداة مرتين.
+- الأدوات المتاحة:
+  - **batch_services**: تسجيل عدة خدمات في رسالة واحدة (مثال: "سجل 3 خدمات: بوليش 500، نانو 1500، ديتيلنج 800").
+  - **batch_penalties**: تسجيل عدة جزاءات (مثال: "سجل جزاء 100 على أحمد و50 على محمود").
+  - **batch_stock_movements**: عدة حركات مخزون (مثال: "استلم 5 بوليش واسحب 2 نانو"). type: add=استلام، withdraw=سحب.
+  - **batch_advances**: عدة سلف (موجودة مسبقاً).
+  - **batch_attendance**: حضور جماعي لكل الموظفين (موجودة مسبقاً).
+  - **batch_waste**: هالك لعدة رولات (موجودة مسبقاً).
+
+#### د. الحذف (Delete Operations):
+- **حذف: استخدم delete_ tools لحذف العمليات بالبحث عن الاسم والمبلغ.**
+- الأدوات المتاحة:
+  - **delete_service**: حذف خدمة بالكود (مثل DET001) — يحذف العمولة المرتبطة.
+  - **delete_stock_item**: حذف خامة بالكود.
+  - **delete_commission**: حذف عمولة بالبحث عن اسم الموظف + المبلغ (تقريبي، يجد أقرب تطابق 10%).
+  - **delete_advance**: حذف سلفة بالبحث عن اسم الموظف + المبلغ.
+  - **delete_penalty**: حذف جزاء بالبحث عن اسم الموظف + المبلغ.
+  - **delete_consumption**: حذف عملية استهلاك رول بالكود + رقم أمر الشغل (OB/OBX). يسترجع الأمتار للرول.
+  - **delete_roll**: حذف رول بالكامل (يحذف كل استهلاكاته المرتبطة).
+- مثال: "امسح سلفة 500 لأحمد" → delete_advance { employeeName, amount }
+- مثال: "امسح استهلاك OBX5 من رول 3M-SG-004" → delete_consumption { rollCode, workOrder }
+
 ### قواعد التنفيذ:
 1. استخدم اسم الموظف/كود الرول كما هو في بيانات JSON بالضبط.
 2. التاريخ بصيغة YYYY-MM-DD. "اليوم" = meta.snapshotDate.
@@ -874,6 +898,9 @@ const TOOL_TABLE_MAP: Record<string, string> = {
   create_customer: 'customers', create_supplier: 'suppliers', create_offer: 'offers',
   create_stock_invoice: 'stock_invoices', delete_service: 'services', delete_stock_item: 'stock_items',
   pay_salary: 'payroll_payments',
+  batch_services: 'services', batch_penalties: 'penalties', batch_stock_movements: 'stock_movements',
+  delete_commission: 'commissions', delete_advance: 'advances', delete_penalty: 'penalties',
+  delete_consumption: 'roll_consumptions', delete_roll: 'rolls',
 }
 
 // ─── Execute a confirmed tool call ───────────────────────────
