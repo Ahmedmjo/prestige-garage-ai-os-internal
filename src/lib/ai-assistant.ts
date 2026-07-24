@@ -858,8 +858,9 @@ function tryParseJson(str: string): any | null {
 
 function parseToolCall(text: string): { toolName: string; args: any } | null {
   if (!text) return null
-  const cleaned = text.replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim()
-  // Pattern 1: TOOL: name \n ARGS: {json}
+  // Normalize line endings + strip markdown code blocks
+  const cleaned = text.replace(/\r\n/g, '\n').replace(/```[a-z]*\n?/gi, '').replace(/```/g, '').trim()
+  // Pattern 1: TOOL: name \n ARGS: {json}  (سطرين منفصلين)
   const m1 = cleaned.match(/^TOOL:\s*([a-z_]+)\s*\n\s*ARGS:\s*(.+)$/is)
   if (m1) {
     const toolName = m1[1].toLowerCase().trim()
@@ -868,12 +869,21 @@ function parseToolCall(text: string): { toolName: string; args: any } | null {
       if (parsed) return { toolName, args: parsed }
     }
   }
-  // Pattern 2: TOOL: name ARGS: {json} (same line)
+  // Pattern 2: TOOL: name ARGS: {json}  (سطر واحد)
   const m2 = cleaned.match(/^TOOL:\s*([a-z_]+)\s+ARGS:\s*(.+)$/is)
   if (m2) {
     const toolName = m2[1].toLowerCase().trim()
     if (TOOL_NAMES.includes(toolName)) {
       const parsed = tryParseJson(m2[2].trim())
+      if (parsed) return { toolName, args: parsed }
+    }
+  }
+  // Pattern 3: search anywhere in text (handles AI prefixing explanatory text before TOOL:)
+  const m3 = cleaned.match(/TOOL:\s*([a-z_]+)\s*\n?\s*ARGS:\s*(\{[\s\S]+\})/is)
+  if (m3) {
+    const toolName = m3[1].toLowerCase().trim()
+    if (TOOL_NAMES.includes(toolName)) {
+      const parsed = tryParseJson(m3[2].trim())
       if (parsed) return { toolName, args: parsed }
     }
   }
